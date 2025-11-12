@@ -1,0 +1,108 @@
+import { useState } from 'react';
+import { Search, X } from 'lucide-react';
+import { MangaSearchResult } from '../types';
+import { searchManga } from '../services/mangaApi';
+
+interface SearchBarProps {
+  onSelectManga: (manga: MangaSearchResult) => void;
+}
+
+export default function SearchBar({ onSelectManga }: SearchBarProps) {
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<MangaSearchResult[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [showResults, setShowResults] = useState(false);
+
+  const handleSearch = async (searchQuery: string) => {
+    if (searchQuery.trim().length < 2) {
+      setResults([]);
+      setShowResults(false);
+      return;
+    }
+
+    setIsSearching(true);
+    const searchResults = await searchManga(searchQuery);
+    setResults(searchResults);
+    setShowResults(true);
+    setIsSearching(false);
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setQuery(value);
+    handleSearch(value);
+  };
+
+  const handleSelect = (manga: MangaSearchResult) => {
+    onSelectManga(manga);
+    setQuery('');
+    setResults([]);
+    setShowResults(false);
+  };
+
+  const handleClear = () => {
+    setQuery('');
+    setResults([]);
+    setShowResults(false);
+  };
+
+  return (
+    <div className="relative w-full max-w-2xl">
+      <div className="relative">
+        <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+        <input
+          type="text"
+          value={query}
+          onChange={handleInputChange}
+          placeholder="Search for manga..."
+          className="w-full pl-12 pr-12 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+        />
+        {query && (
+          <button
+            onClick={handleClear}
+            className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        )}
+      </div>
+
+      {showResults && (
+        <div className="absolute z-50 w-full mt-2 bg-white border border-gray-200 rounded-lg shadow-lg max-h-96 overflow-y-auto">
+          {isSearching ? (
+            <div className="p-4 text-center text-gray-500">Searching...</div>
+          ) : results.length === 0 ? (
+            <div className="p-4 text-center text-gray-500">No results found</div>
+          ) : (
+            <ul className="divide-y divide-gray-100">
+              {results.map((manga) => (
+                <li
+                  key={manga.id}
+                  onClick={() => handleSelect(manga)}
+                  className="p-4 hover:bg-gray-50 cursor-pointer flex items-center gap-4 transition-colors"
+                >
+                  {manga.coverImage && (
+                    <img
+                      src={manga.coverImage}
+                      alt={manga.title}
+                      className="w-12 h-16 object-cover rounded"
+                    />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-medium text-gray-900 truncate">{manga.title}</h3>
+                    {manga.description && (
+                      <p className="text-sm text-gray-500 line-clamp-2 mt-1">
+                        {manga.description}
+                      </p>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+

@@ -1,0 +1,92 @@
+import { Manga, MangaSearchResult } from '../types';
+
+// Using MangaDex API as it's free and doesn't require authentication
+const MANGADEX_API = 'https://api.mangadex.org';
+
+export async function searchManga(query: string): Promise<MangaSearchResult[]> {
+  try {
+    const response = await fetch(
+      `${MANGADEX_API}/manga?title=${encodeURIComponent(query)}&limit=20&includes[]=cover_art`
+    );
+    const data = await response.json();
+    
+    return data.data.map((manga: any) => {
+      const coverArt = manga.relationships?.find((rel: any) => rel.type === 'cover_art');
+      const coverFileName = coverArt?.attributes?.fileName;
+      const coverImage = coverFileName 
+        ? `https://uploads.mangadex.org/covers/${manga.id}/${coverFileName}.256.jpg`
+        : undefined;
+
+      return {
+        id: manga.id,
+        title: manga.attributes.title.en || 
+               manga.attributes.title.ja || 
+               Object.values(manga.attributes.title)[0] || 
+               'Unknown Title',
+        coverImage,
+        description: manga.attributes.description?.en || 
+                     manga.attributes.description?.ja || 
+                     Object.values(manga.attributes.description || {})[0] || 
+                     undefined,
+      };
+    });
+  } catch (error) {
+    console.error('Error searching manga:', error);
+    return [];
+  }
+}
+
+export async function getMangaDetails(id: string): Promise<Manga | null> {
+  try {
+    const response = await fetch(
+      `${MANGADEX_API}/manga/${id}?includes[]=cover_art&includes[]=author&includes[]=artist`
+    );
+    const data = await response.json();
+    
+    if (!data.data) return null;
+
+    const manga = data.data;
+    const coverArt = manga.relationships?.find((rel: any) => rel.type === 'cover_art');
+    const coverFileName = coverArt?.attributes?.fileName;
+    const coverImage = coverFileName 
+      ? `https://uploads.mangadex.org/covers/${manga.id}/${coverFileName}.512.jpg`
+      : undefined;
+
+    const author = manga.relationships?.find((rel: any) => rel.type === 'author');
+    const artist = manga.relationships?.find((rel: any) => rel.type === 'artist');
+
+    // Get chapter count
+    const chaptersResponse = await fetch(
+      `${MANGADEX_API}/manga/${id}/aggregate?translatedLanguage[]=en`
+    );
+    const chaptersData = await chaptersResponse.json();
+    const totalChapters = chaptersData.volumes 
+      ? Object.values(chaptersData.volumes).reduce((acc: number, vol: any) => {
+          return acc + Object.keys(vol.chapters || {}).length;
+        }, 0)
+      : 0;
+
+    return {
+      id: manga.id,
+      title: manga.attributes.title.en || 
+             manga.attributes.title.ja || 
+             Object.values(manga.attributes.title)[0] || 
+             'Unknown Title',
+      description: manga.attributes.description?.en || 
+                   manga.attributes.description?.ja || 
+                   Object.values(manga.attributes.description || {})[0] || 
+                   undefined,
+      coverImage,
+      status: manga.attributes.status,
+      chapters: totalChapters,
+      author: author?.attributes?.name || artist?.attributes?.name || undefined,
+      genres: manga.attributes.tags
+        ?.filter((tag: any) => tag.attributes.group === 'genre')
+        ?.map((tag: any) => tag.attributes.name.en || tag.attributes.name.ja) || [],
+    };
+  } catch (error) {
+    console.error('Error fetching manga details:', error);
+    return null;
+  }
+}
+
