@@ -1,0 +1,42 @@
+==========================================
+YouRead Browser Extension - Installation
+==========================================
+
+QUICK INSTALL:
+1. Open Chrome/Edge and go to: chrome://extensions/ (or edge://extensions/)
+2. Enable "Developer mode" (toggle in top right)
+3. Click "Load unpacked"
+4. Select this extension folder
+5. Done!
+
+ICONS SETUP (Required):
+The extension needs icon files. To create them:
+
+Option 1 - Using the HTML generator:
+1. Open "icons/create-icons.html" in your browser
+2. Click "Generate Icons" button
+3. Right-click each canvas and "Save image as..."
+4. Save as: icon16.png, icon48.png, icon128.png in the icons/ folder
+
+Option 2 - Use any image editor:
+- Create 3 PNG files: 16x16, 48x48, 128x128 pixels
+- Name them: icon16.png, icon48.png, icon128.png
+- Place them in the icons/ folder
+
+CONFIGURATION:
+Before using, update the YouRead URL in these files:
+- background.js (line 3)
+- content.js (line 5)  
+- popup.js (line 3)
+
+Change: const YOUREAD_URL = 'https://your-url.vercel.app';
+To your actual YouRead website URL.
+
+USAGE:
+1. Visit any MangaNato manga page
+2. Click the extension icon
+3. Click "Add to YouRead"
+4. The manga will be added to your library!
+
+For more details, see README.md
+

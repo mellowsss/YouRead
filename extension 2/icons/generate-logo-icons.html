@@ -115,22 +115,15 @@
       const left = padding;
       const top = padding;
       
-      // Draw rounded square - left half teal
+      // Draw rounded square background
       ctx.beginPath();
       ctx.roundRect(left, top, width, height, cornerRadius);
       ctx.fillStyle = teal;
       ctx.fill();
       
-      // Draw right half in coral (overlay)
+      // Draw right half in coral
       ctx.beginPath();
-      // Create a path for the right half with rounded corners on the right side
-      ctx.moveTo(centerX, top);
-      ctx.lineTo(centerX, top + cornerRadius);
-      ctx.arcTo(centerX + width/2, top, centerX + width/2, top + cornerRadius, cornerRadius);
-      ctx.lineTo(centerX + width/2, top + height - cornerRadius);
-      ctx.arcTo(centerX + width/2, top + height, centerX + width/2 - cornerRadius, top + height, cornerRadius);
-      ctx.lineTo(centerX, top + height);
-      ctx.closePath();
+      ctx.roundRect(centerX, top, width / 2, height, cornerRadius);
       ctx.fillStyle = coral;
       ctx.fill();
       
@@ -151,39 +144,42 @@
       ctx.stroke();
       ctx.setLineDash([]);
       
-      // Draw white "M" letter - bold and centered
-      const mSize = size * 0.45;
+      // Draw white "M" letter
+      ctx.fillStyle = white;
+      ctx.font = `bold ${size * 0.5}px Arial, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      
+      // Draw a bold M
+      const mSize = size * 0.4;
       const mX = centerX;
       const mY = centerY;
-      const mWidth = mSize * 0.85;
+      const mWidth = mSize * 0.8;
       const mHeight = mSize;
-      const strokeWidth = Math.max(2.5, size / 12);
+      const strokeWidth = Math.max(2, size / 16);
       
-      ctx.fillStyle = white;
-      ctx.strokeStyle = white;
       ctx.lineWidth = strokeWidth;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
+      ctx.strokeStyle = white;
+      ctx.fillStyle = white;
       
-      // Draw bold M shape - filled for better visibility
+      // Draw M shape
       ctx.beginPath();
-      // Left vertical
       ctx.moveTo(mX - mWidth/2, mY + mHeight/2);
       ctx.lineTo(mX - mWidth/2, mY - mHeight/2);
-      // Left diagonal to center
-      ctx.lineTo(mX - mWidth/8, mY - mHeight/4);
-      // Center point
       ctx.lineTo(mX, mY);
-      // Right diagonal from center
-      ctx.lineTo(mX + mWidth/8, mY - mHeight/4);
-      // Right vertical
+      ctx.lineTo(mX + mWidth/2, mY - mHeight/2);
+      ctx.lineTo(mX + mWidth/2, mY + mHeight/2);
+      ctx.stroke();
+      
+      // Fill M for better visibility
+      ctx.beginPath();
+      ctx.moveTo(mX - mWidth/2, mY + mHeight/2);
+      ctx.lineTo(mX - mWidth/2, mY - mHeight/2);
+      ctx.lineTo(mX, mY);
       ctx.lineTo(mX + mWidth/2, mY - mHeight/2);
       ctx.lineTo(mX + mWidth/2, mY + mHeight/2);
       ctx.closePath();
       ctx.fill();
-      
-      // Add stroke for definition
-      ctx.stroke();
     }
     
     function generateAllIcons() {

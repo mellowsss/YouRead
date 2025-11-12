@@ -160,10 +160,17 @@ function App() {
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl flex items-center justify-center relative overflow-hidden shadow-md" style={{
                 background: 'linear-gradient(to right, #5eead4 0%, #5eead4 50%, #ff6b6b 50%, #ff6b6b 100%)',
-                border: '2px solid white'
+                border: '2px solid white',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
               }}>
-                <div className="absolute left-1/2 top-0 bottom-0 w-px border-l border-dashed border-white opacity-50"></div>
-                <span className="relative text-white font-bold text-xl z-10 drop-shadow-sm">M</span>
+                <div className="absolute left-1/2 top-0 bottom-0 w-0.5" style={{
+                  borderLeft: '1px dashed white',
+                  opacity: 0.6
+                }}></div>
+                <span className="relative text-white font-bold text-xl z-10" style={{
+                  textShadow: '0 1px 2px rgba(0,0,0,0.2)',
+                  letterSpacing: '-0.5px'
+                }}>M</span>
               </div>
               <h1 className="text-3xl font-bold text-gray-900">YouRead</h1>
             </div>
