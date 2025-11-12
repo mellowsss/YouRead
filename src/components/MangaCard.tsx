@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { BookOpen, Calendar, Trash2, Edit3, ExternalLink } from 'lucide-react';
 import { TrackedManga } from '../types';
-import { getManganatoDetails } from '../services/manganatoApi';
+import { searchManga } from '../services/mangaApi';
 
 interface MangaCardProps {
   manga: TrackedManga;
@@ -61,35 +61,45 @@ export default function MangaCard({ manga, onRemove, onEdit }: MangaCardProps) {
   const [fetchedCoverImage, setFetchedCoverImage] = useState<string | undefined>(undefined);
   const [isFetching, setIsFetching] = useState(false);
 
-  // Fetch cover image from MangaNato if missing
+  // Fetch cover image from MangaDex API if missing
   useEffect(() => {
-    // Only fetch if we don't have a cover image and we have a MangaNato URL
-    if (!manga.coverImage && !fetchedCoverImage && !isFetching && manga.manganatoUrl) {
+    // Only fetch if we don't have a cover image
+    if (!manga.coverImage && !fetchedCoverImage && !isFetching) {
       setIsFetching(true);
-      console.log(`Fetching cover image for "${manga.title}" from:`, manga.manganatoUrl);
+      console.log(`Searching MangaDex for cover image: "${manga.title}"`);
       
-      getManganatoDetails(manga.manganatoUrl)
-        .then((details) => {
-          if (details && details.coverImage) {
-            console.log(`✅ Fetched cover image for "${manga.title}":`, details.coverImage);
-            setFetchedCoverImage(details.coverImage);
+      // Search MangaDex for the manga by title
+      searchManga(manga.title)
+        .then((results) => {
+          // Find the best match (exact title match or first result)
+          let bestMatch = results.find(r => 
+            r.title.toLowerCase().trim() === manga.title.toLowerCase().trim()
+          );
+          
+          // If no exact match, use the first result
+          if (!bestMatch && results.length > 0) {
+            bestMatch = results[0];
+          }
+          
+          if (bestMatch && bestMatch.coverImage) {
+            console.log(`✅ Found cover image for "${manga.title}" from MangaDex:`, bestMatch.coverImage);
+            setFetchedCoverImage(bestMatch.coverImage);
             
             // Also update the stored manga with the cover image
-            // Import updateTrackedManga from storage
             import('../services/storage').then(({ updateTrackedManga }) => {
-              updateTrackedManga(manga.id, { coverImage: details.coverImage });
+              updateTrackedManga(manga.id, { coverImage: bestMatch.coverImage });
             });
           } else {
-            console.log(`❌ No cover image found for "${manga.title}"`);
+            console.log(`❌ No cover image found for "${manga.title}" in MangaDex`);
           }
           setIsFetching(false);
         })
         .catch((error) => {
-          console.error(`Error fetching cover image for "${manga.title}":`, error);
+          console.error(`Error searching MangaDex for "${manga.title}":`, error);
           setIsFetching(false);
         });
     }
-  }, [manga.coverImage, manga.manganatoUrl, manga.id, manga.title, fetchedCoverImage, isFetching]);
+  }, [manga.coverImage, manga.id, manga.title, fetchedCoverImage, isFetching]);
 
   // Use fetched image if available, otherwise use stored image
   const coverImageToUse = manga.coverImage || fetchedCoverImage;
