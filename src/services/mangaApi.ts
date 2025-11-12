@@ -5,15 +5,18 @@ const MANGADEX_API = 'https://api.mangadex.org';
 
 export async function searchManga(query: string): Promise<MangaSearchResult[]> {
   try {
-    // Use both title and altTitles for better matching
+    // Use MangaDex search endpoint which searches both title and altTitles
     const response = await fetch(
-      `${MANGADEX_API}/manga?title=${encodeURIComponent(query)}&limit=20&includes[]=cover_art&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica`
+      `${MANGADEX_API}/manga?title=${encodeURIComponent(query)}&limit=20&includes[]=cover_art&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica&order[relevance]=desc`
     );
     const data = await response.json();
     
     if (!data.data || !Array.isArray(data.data)) {
+      console.log('MangaDex search returned no results for:', query);
       return [];
     }
+    
+    console.log(`MangaDex search found ${data.data.length} results for:`, query);
     
     return data.data.map((manga: any) => {
       const coverArt = manga.relationships?.find((rel: any) => rel.type === 'cover_art');
@@ -32,6 +35,12 @@ export async function searchManga(query: string): Promise<MangaSearchResult[]> {
                     Object.values(manga.attributes.title)[0] || 
                     'Unknown Title';
 
+      // Get altTitles for better matching
+      const altTitles = manga.attributes.altTitles || [];
+      const allTitles = [title, ...altTitles.map((alt: any) => 
+        alt.en || alt.ja || alt.ko || Object.values(alt)[0]
+      ).filter(Boolean)];
+
       return {
         id: manga.id,
         title,
@@ -40,6 +49,8 @@ export async function searchManga(query: string): Promise<MangaSearchResult[]> {
                      manga.attributes.description?.ja || 
                      Object.values(manga.attributes.description || {})[0] || 
                      undefined,
+        // Store altTitles for better matching
+        altTitles: allTitles,
       };
     });
   } catch (error) {

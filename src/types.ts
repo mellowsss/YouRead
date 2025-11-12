@@ -23,5 +23,6 @@ export interface MangaSearchResult {
   title: string;
   coverImage?: string;
   description?: string;
+  altTitles?: string[];
 }
 

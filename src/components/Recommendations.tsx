@@ -38,38 +38,42 @@ export default function Recommendations({ trackedManga, onSelectManga }: Recomme
         }
       });
 
-      // If we have genres, search by them
+      // Get recommendations - try multiple approaches
+      const allResults: any[] = [];
+      const trackedIds = new Set(trackedManga.map(m => m.id));
+      
+      // Approach 1: Search by popular genres from read manga
       if (allGenres.size > 0) {
-        const genreArray = Array.from(allGenres).slice(0, 5); // Limit to 5 genres
-        const genreQuery = genreArray.join(' ');
-        
-        // Search for manga with similar genres
-        const results = await searchManga(genreQuery);
-        
-        // Filter out manga that are already tracked
-        const trackedIds = new Set(trackedManga.map(m => m.id));
-        const filtered = results.filter(r => !trackedIds.has(r.id));
-        
-        // Get unique recommendations (limit to 20)
-        const unique = Array.from(
-          new Map(filtered.map(r => [r.id, r])).values()
-        ).slice(0, 20);
-        
-        setRecommendations(unique);
-      } else {
-        // If no genres, get popular manga
-        const popularQueries = ['action', 'fantasy', 'romance', 'comedy', 'drama'];
-        const randomQuery = popularQueries[Math.floor(Math.random() * popularQueries.length)];
-        const results = await searchManga(randomQuery);
-        
-        const trackedIds = new Set(trackedManga.map(m => m.id));
-        const filtered = results.filter(r => !trackedIds.has(r.id));
-        const unique = Array.from(
-          new Map(filtered.map(r => [r.id, r])).values()
-        ).slice(0, 20);
-        
-        setRecommendations(unique);
+        const genreArray = Array.from(allGenres).slice(0, 3);
+        for (const genre of genreArray) {
+          try {
+            const results = await searchManga(genre);
+            allResults.push(...results.filter(r => !trackedIds.has(r.id)));
+          } catch (err) {
+            console.error(`Error searching for genre ${genre}:`, err);
+          }
+        }
       }
+      
+      // Approach 2: Search by popular keywords
+      const popularQueries = ['action', 'fantasy', 'romance', 'comedy', 'drama', 'adventure', 'supernatural'];
+      for (let i = 0; i < 3 && allResults.length < 20; i++) {
+        const randomQuery = popularQueries[Math.floor(Math.random() * popularQueries.length)];
+        try {
+          const results = await searchManga(randomQuery);
+          allResults.push(...results.filter(r => !trackedIds.has(r.id)));
+        } catch (err) {
+          console.error(`Error searching for ${randomQuery}:`, err);
+        }
+      }
+      
+      // Get unique recommendations (limit to 20)
+      const unique = Array.from(
+        new Map(allResults.map(r => [r.id, r])).values()
+      ).slice(0, 20);
+      
+      console.log(`Found ${unique.length} recommendations`);
+      setRecommendations(unique);
     } catch (err) {
       console.error('Error fetching recommendations:', err);
       setError('Failed to load recommendations. Please try again.');

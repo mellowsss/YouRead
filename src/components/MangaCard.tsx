@@ -12,13 +12,16 @@ interface MangaCardProps {
 // Get proxied image URL to bypass CORS
 function getProxiedImageUrl(imageUrl: string | undefined): string | null {
   if (!imageUrl || imageUrl.trim() === '') {
-    console.log('getProxiedImageUrl: Empty or undefined image URL');
     return null;
   }
   
   // If it's already a proxied URL, return as is
   if (imageUrl.includes('/api/image-proxy')) {
-    console.log('getProxiedImageUrl: Already proxied:', imageUrl);
+    return imageUrl;
+  }
+  
+  // MangaDex images work directly, no proxy needed
+  if (imageUrl.includes('mangadex.org') || imageUrl.includes('uploads.mangadex.org')) {
     return imageUrl;
   }
   
@@ -27,15 +30,12 @@ function getProxiedImageUrl(imageUrl: string | undefined): string | null {
                     imageUrl.includes('2xstorage.com');
   
   if (!needsProxy) {
-    // For other domains (like MangaDex), return as is
-    console.log('getProxiedImageUrl: No proxy needed (other domain):', imageUrl);
+    // For other domains, return as is
     return imageUrl;
   }
   
   // Use our image proxy to bypass CORS
-  const proxiedUrl = `/api/image-proxy?url=${encodeURIComponent(imageUrl)}`;
-  console.log('getProxiedImageUrl: Proxying URL:', { original: imageUrl, proxied: proxiedUrl });
-  return proxiedUrl;
+  return `/api/image-proxy?url=${encodeURIComponent(imageUrl)}`;
 }
 
 export default function MangaCard({ manga, onRemove, onEdit }: MangaCardProps) {
@@ -83,17 +83,32 @@ export default function MangaCard({ manga, onRemove, onEdit }: MangaCardProps) {
             new Map(allResults.map(r => [r.id, r])).values()
           );
           
-          // Find the best match - try exact match first, then partial match
-          let bestMatch = uniqueResults.find(r => 
-            r.title.toLowerCase().trim() === manga.title.toLowerCase().trim()
-          );
+          // Find the best match - try exact match first, then check altTitles, then partial match
+          const mTitle = manga.title.toLowerCase().trim();
+          
+          let bestMatch = uniqueResults.find(r => {
+            const rTitle = r.title.toLowerCase().trim();
+            if (rTitle === mTitle) return true;
+            // Check altTitles if available
+            if (r.altTitles) {
+              return r.altTitles.some(alt => alt.toLowerCase().trim() === mTitle);
+            }
+            return false;
+          });
           
           if (!bestMatch) {
             // Try partial match (contains the title or title contains result)
             bestMatch = uniqueResults.find(r => {
               const rTitle = r.title.toLowerCase().trim();
-              const mTitle = manga.title.toLowerCase().trim();
-              return rTitle.includes(mTitle) || mTitle.includes(rTitle);
+              if (rTitle.includes(mTitle) || mTitle.includes(rTitle)) return true;
+              // Check altTitles for partial matches
+              if (r.altTitles) {
+                return r.altTitles.some(alt => {
+                  const altLower = alt.toLowerCase().trim();
+                  return altLower.includes(mTitle) || mTitle.includes(altLower);
+                });
+              }
+              return false;
             });
           }
           
@@ -134,6 +149,7 @@ export default function MangaCard({ manga, onRemove, onEdit }: MangaCardProps) {
             src={imageUrl}
             alt={manga.title}
             className="w-24 h-32 object-cover rounded flex-shrink-0"
+            crossOrigin="anonymous"
             onError={(e) => {
               // If image fails to load, hide it and show placeholder
               const target = e.target as HTMLImageElement;
@@ -141,8 +157,16 @@ export default function MangaCard({ manga, onRemove, onEdit }: MangaCardProps) {
                 title: manga.title,
                 original: coverImageToUse,
                 proxied: imageUrl,
-                actualSrc: target.src
+                actualSrc: target.src,
+                error: 'Image load failed'
               });
+              
+              // Try to reload without proxy if it's a MangaDex image
+              if (imageUrl.includes('/api/image-proxy') && coverImageToUse && coverImageToUse.includes('mangadex.org')) {
+                console.log('Retrying with direct MangaDex URL:', coverImageToUse);
+                target.src = coverImageToUse;
+                return;
+              }
               
               target.style.display = 'none';
               const placeholder = target.nextElementSibling as HTMLElement;
@@ -153,7 +177,8 @@ export default function MangaCard({ manga, onRemove, onEdit }: MangaCardProps) {
             onLoad={() => {
               console.log('✅ Image loaded successfully:', {
                 title: manga.title,
-                source: fetchedCoverImage ? 'fetched' : 'stored'
+                source: fetchedCoverImage ? 'fetched' : 'stored',
+                url: imageUrl
               });
             }}
             loading="lazy"
