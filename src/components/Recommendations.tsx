@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Sparkles, Loader2 } from 'lucide-react';
 import { TrackedManga, MangaSearchResult } from '../types';
-import { searchManga, searchMangaByTag, getMangaDetails } from '../services/mangaApi';
+import { searchManga, searchMangaByTag } from '../services/mangaApi';
 
 interface RecommendationsProps {
   trackedManga: TrackedManga[];
