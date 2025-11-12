@@ -65,14 +65,19 @@ export default async function handler(
 
     console.log('Image proxy: Fetching image from:', decodedUrl);
 
+    // Prepare headers - 2xstorage.com might not need Referer
+    const headers: Record<string, string> = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+      'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8',
+    };
+    
+    // Only add Referer for MangaNato domains, not for external CDNs
+    if (decodedUrl.includes('manganato.gg') || decodedUrl.includes('manganato.com')) {
+      headers['Referer'] = 'https://www.manganato.gg/';
+    }
+
     // Fetch the image with proper headers
-    const fetchResponse = await fetch(decodedUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8',
-        'Referer': 'https://www.manganato.gg/',
-      },
-    });
+    const fetchResponse = await fetch(decodedUrl, { headers });
 
     if (!fetchResponse.ok) {
       console.error('Image proxy: Failed to fetch image:', fetchResponse.status, fetchResponse.statusText);

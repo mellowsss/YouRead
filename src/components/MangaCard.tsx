@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { BookOpen, Calendar, Trash2, Edit3, ExternalLink } from 'lucide-react';
 import { TrackedManga } from '../types';
 
@@ -10,11 +11,13 @@ interface MangaCardProps {
 // Get proxied image URL to bypass CORS
 function getProxiedImageUrl(imageUrl: string | undefined): string | null {
   if (!imageUrl || imageUrl.trim() === '') {
+    console.log('getProxiedImageUrl: Empty or undefined image URL');
     return null;
   }
   
   // If it's already a proxied URL, return as is
   if (imageUrl.includes('/api/image-proxy')) {
+    console.log('getProxiedImageUrl: Already proxied:', imageUrl);
     return imageUrl;
   }
   
@@ -24,11 +27,14 @@ function getProxiedImageUrl(imageUrl: string | undefined): string | null {
   
   if (!needsProxy) {
     // For other domains (like MangaDex), return as is
+    console.log('getProxiedImageUrl: No proxy needed (other domain):', imageUrl);
     return imageUrl;
   }
   
   // Use our image proxy to bypass CORS
-  return `/api/image-proxy?url=${encodeURIComponent(imageUrl)}`;
+  const proxiedUrl = `/api/image-proxy?url=${encodeURIComponent(imageUrl)}`;
+  console.log('getProxiedImageUrl: Proxying URL:', { original: imageUrl, proxied: proxiedUrl });
+  return proxiedUrl;
 }
 
 export default function MangaCard({ manga, onRemove, onEdit }: MangaCardProps) {
@@ -52,6 +58,19 @@ export default function MangaCard({ manga, onRemove, onEdit }: MangaCardProps) {
     : 0;
 
   const imageUrl = manga.coverImage ? getProxiedImageUrl(manga.coverImage) : null;
+  
+  // Debug logging
+  useEffect(() => {
+    if (manga.coverImage) {
+      console.log('MangaCard: Image data for', manga.title, {
+        original: manga.coverImage,
+        proxied: imageUrl,
+        hasProxied: !!imageUrl
+      });
+    } else {
+      console.log('MangaCard: No cover image for', manga.title);
+    }
+  }, [manga.title, manga.coverImage, imageUrl]);
 
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-md transition-shadow">
@@ -69,8 +88,19 @@ export default function MangaCard({ manga, onRemove, onEdit }: MangaCardProps) {
                 original: manga.coverImage,
                 proxied: imageUrl,
                 actualSrc: target.src,
+                status: target.naturalWidth === 0 ? 'failed' : 'unknown',
                 error: e
               });
+              
+              // Try to fetch the image directly to see what error we get
+              fetch(imageUrl)
+                .then(res => {
+                  console.log('Direct fetch response:', res.status, res.statusText, res.headers.get('content-type'));
+                  return res.text();
+                })
+                .then(text => console.log('Response preview:', text.substring(0, 200)))
+                .catch(err => console.error('Direct fetch error:', err));
+              
               target.style.display = 'none';
               const placeholder = target.nextElementSibling as HTMLElement;
               if (placeholder) {
