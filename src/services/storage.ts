@@ -25,8 +25,27 @@ export function addTrackedManga(manga: TrackedManga): void {
   const exists = tracked.find(m => m.id === manga.id);
   
   if (!exists) {
+    // Debug: Log what we're about to save
+    console.log('addTrackedManga: Adding manga', {
+      id: manga.id,
+      title: manga.title,
+      coverImage: manga.coverImage,
+      hasCoverImage: !!manga.coverImage
+    });
     tracked.push(manga);
     saveTrackedManga(tracked);
+    
+    // Verify it was saved correctly
+    const verify = getTrackedManga();
+    const saved = verify.find(m => m.id === manga.id);
+    if (saved) {
+      console.log('addTrackedManga: Verified saved manga', {
+        id: saved.id,
+        title: saved.title,
+        coverImage: saved.coverImage,
+        hasCoverImage: !!saved.coverImage
+      });
+    }
   }
 }
 

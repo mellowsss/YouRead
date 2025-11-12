@@ -70,6 +70,14 @@ function App() {
     }
     
     console.log(`Starting bulk import of ${mangaList.length} manga...`);
+    console.log('Sample manga data (first 3):', mangaList.slice(0, 3).map(m => ({
+      id: m.id,
+      title: m.title,
+      coverImage: m.coverImage,
+      coverImageType: typeof m.coverImage,
+      hasCoverImage: !!m.coverImage
+    })));
+    
     let added = 0;
     let updated = 0;
     let skipped = 0;
@@ -86,16 +94,24 @@ function App() {
         const existing = currentManga.find(m => m.id === manga.id);
         
         if (!existing) {
-          // Clean and validate cover image
+          // Clean and validate cover image - preserve it if it exists
           let coverImage = manga.coverImage;
+          console.log(`Processing manga "${manga.title}":`, {
+            originalCoverImage: manga.coverImage,
+            coverImageType: typeof manga.coverImage,
+            coverImageValue: manga.coverImage
+          });
+          
           if (coverImage && typeof coverImage === 'string') {
             coverImage = coverImage.trim();
             if (coverImage === '') {
               coverImage = undefined;
             }
-          } else {
+          } else if (coverImage === null || coverImage === undefined) {
             coverImage = undefined;
           }
+          
+          console.log(`Final coverImage for "${manga.title}":`, coverImage);
           
           const newManga: TrackedManga = {
             id: manga.id,
@@ -108,10 +124,12 @@ function App() {
             dateAdded: new Date().toISOString(),
             lastUpdated: new Date().toISOString(),
           };
+          
+          console.log(`Saving manga "${manga.title}" with coverImage:`, newManga.coverImage);
           addTrackedManga(newManga);
           added++;
         } else {
-          // Update existing with new chapter info
+          // Update existing with new chapter info and cover image if missing
           const updates: Partial<TrackedManga> = {
             lastReadChapter: manga.lastReadChapter !== undefined 
               ? Math.max(manga.lastReadChapter || 0, existing.lastReadChapter || 0)
@@ -119,6 +137,19 @@ function App() {
             totalChapters: manga.totalChapters || manga.chapters || existing.totalChapters,
             lastUpdated: new Date().toISOString(),
           };
+          
+          // If existing doesn't have cover image but new one does, update it
+          if (!existing.coverImage && manga.coverImage) {
+            let coverImage = manga.coverImage;
+            if (coverImage && typeof coverImage === 'string') {
+              coverImage = coverImage.trim();
+              if (coverImage !== '') {
+                updates.coverImage = coverImage;
+                console.log(`Updating cover image for existing manga "${manga.title}":`, coverImage);
+              }
+            }
+          }
+          
           if (manga.lastReadChapter && manga.lastReadChapter > (existing.lastReadChapter || 0)) {
             updates.readingStatus = 'reading';
           }
@@ -133,6 +164,19 @@ function App() {
     
     // Refresh the list
     const updatedList = getTrackedManga();
+    
+    // Debug: Check what was actually saved
+    console.log('Verifying saved data - sample of saved manga:', updatedList.slice(0, 3).map(m => ({
+      id: m.id,
+      title: m.title,
+      coverImage: m.coverImage,
+      hasCoverImage: !!m.coverImage
+    })));
+    
+    // Count how many have cover images
+    const withImages = updatedList.filter(m => m.coverImage).length;
+    console.log(`Total manga: ${updatedList.length}, With cover images: ${withImages}`);
+    
     setTrackedManga(updatedList);
     
     console.log(`Import complete: ${added} added, ${updated} updated, ${skipped} skipped`);
