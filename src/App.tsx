@@ -24,25 +24,33 @@ function App() {
   }, []);
 
   const handleSelectManga = async (mangaResult: MangaSearchResult) => {
-    let details = null;
-    
-    // Check if it's a MangaNato manga
-    if (mangaResult.id.startsWith('manganato_')) {
-      details = await getManganatoDetailsById(mangaResult.id);
-    } else {
-      // MangaDex manga
-      details = await getMangaDetails(mangaResult.id);
-    }
-    
-    if (details) {
-      const newManga: TrackedManga = {
-        ...details,
-        readingStatus: 'planning',
-        dateAdded: new Date().toISOString(),
-        lastUpdated: new Date().toISOString(),
-      };
-      addTrackedManga(newManga);
-      setTrackedManga(getTrackedManga());
+    try {
+      let details = null;
+      
+      // Check if it's a MangaNato manga
+      if (mangaResult.id.startsWith('manganato_')) {
+        details = await getManganatoDetailsById(mangaResult.id);
+      } else {
+        // MangaDex manga
+        details = await getMangaDetails(mangaResult.id);
+      }
+      
+      if (details) {
+        const newManga: TrackedManga = {
+          ...details,
+          readingStatus: 'planning',
+          dateAdded: new Date().toISOString(),
+          lastUpdated: new Date().toISOString(),
+        };
+        addTrackedManga(newManga);
+        setTrackedManga(getTrackedManga());
+      } else {
+        console.error('Failed to fetch manga details');
+        alert('Failed to fetch manga details. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error selecting manga:', error);
+      alert('An error occurred while adding the manga. Please try again.');
     }
   };
 

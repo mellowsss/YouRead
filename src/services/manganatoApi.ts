@@ -1,10 +1,29 @@
 import { Manga, MangaSearchResult } from '../types';
 
-// CORS proxy for fetching MangaNato content
-// Note: In production, you should use your own backend proxy for security
-const CORS_PROXY = 'https://api.allorigins.win/raw?url=';
+// Use our own API proxy (Vercel serverless function)
+const API_PROXY = '/api/manganato-proxy';
 
 const MANGANATO_BASE = 'https://www.manganato.gg';
+
+/**
+ * Fetch HTML from MangaNato using our proxy
+ */
+async function fetchManganatoHtml(url: string): Promise<string | null> {
+  try {
+    const proxyUrl = `${API_PROXY}?url=${encodeURIComponent(url)}`;
+    const response = await fetch(proxyUrl);
+    
+    if (!response.ok) {
+      console.error(`Proxy error: ${response.status} ${response.statusText}`);
+      return null;
+    }
+    
+    return await response.text();
+  } catch (error) {
+    console.error('Error fetching from proxy:', error);
+    return null;
+  }
+}
 
 /**
  * Extract manga ID from MangaNato URL
@@ -26,10 +45,11 @@ function extractMangaId(url: string): string | null {
 export async function searchManganato(query: string): Promise<MangaSearchResult[]> {
   try {
     const searchUrl = `${MANGANATO_BASE}/search/story/${encodeURIComponent(query)}`;
-    const proxyUrl = `${CORS_PROXY}${encodeURIComponent(searchUrl)}`;
+    const html = await fetchManganatoHtml(searchUrl);
     
-    const response = await fetch(proxyUrl);
-    const html = await response.text();
+    if (!html) {
+      return [];
+    }
     
     // Parse HTML to extract manga results
     const parser = new DOMParser();
@@ -100,11 +120,17 @@ export async function searchManganato(query: string): Promise<MangaSearchResult[
 export async function getManganatoDetails(url: string): Promise<Manga | null> {
   try {
     const mangaId = extractMangaId(url);
-    if (!mangaId) return null;
+    if (!mangaId) {
+      console.error('Could not extract manga ID from URL:', url);
+      return null;
+    }
     
-    const proxyUrl = `${CORS_PROXY}${encodeURIComponent(url)}`;
-    const response = await fetch(proxyUrl);
-    const html = await response.text();
+    const html = await fetchManganatoHtml(url);
+    
+    if (!html) {
+      console.error('Failed to fetch HTML from proxy');
+      return null;
+    }
     
     const parser = new DOMParser();
     const doc = parser.parseFromString(html, 'text/html');

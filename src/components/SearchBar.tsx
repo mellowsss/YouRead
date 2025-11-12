@@ -37,11 +37,17 @@ export default function SearchBar({ onSelectManga }: SearchBarProps) {
             description: manga.description,
           });
           setQuery('');
+          setShowResults(false);
+        } else {
+          console.error('Failed to fetch manga from MangaNato');
+          // Show error in console and let user know
+          setQuery('');
         }
       } catch (error) {
         console.error('Error fetching MangaNato URL:', error);
+      } finally {
+        setIsSearching(false);
       }
-      setIsSearching(false);
       return;
     }
 
