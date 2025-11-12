@@ -86,19 +86,21 @@ function App() {
         const existing = currentManga.find(m => m.id === manga.id);
         
         if (!existing) {
-          // Log image URL for debugging
-          console.log(`Adding manga: ${manga.title}`, {
-            id: manga.id,
-            coverImage: manga.coverImage,
-            hasCoverImage: !!manga.coverImage,
-            coverImageType: typeof manga.coverImage,
-            coverImageLength: manga.coverImage?.length
-          });
+          // Clean and validate cover image
+          let coverImage = manga.coverImage;
+          if (coverImage && typeof coverImage === 'string') {
+            coverImage = coverImage.trim();
+            if (coverImage === '') {
+              coverImage = undefined;
+            }
+          } else {
+            coverImage = undefined;
+          }
           
           const newManga: TrackedManga = {
             id: manga.id,
             title: manga.title,
-            coverImage: manga.coverImage, // Keep original URL - proxy will be applied in component
+            coverImage: coverImage, // Keep original URL - proxy will be applied in component
             manganatoUrl: manga.manganatoUrl,
             lastReadChapter: manga.lastReadChapter,
             totalChapters: manga.totalChapters || manga.chapters,

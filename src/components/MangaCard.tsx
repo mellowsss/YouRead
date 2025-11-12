@@ -8,29 +8,22 @@ interface MangaCardProps {
 }
 
 // Get proxied image URL to bypass CORS
-function getProxiedImageUrl(imageUrl: string | undefined): string {
-  if (!imageUrl) {
-    console.log('getProxiedImageUrl: No image URL provided');
-    return '';
+function getProxiedImageUrl(imageUrl: string | undefined): string | null {
+  if (!imageUrl || imageUrl.trim() === '') {
+    return null;
   }
-  
-  console.log('getProxiedImageUrl: Original URL:', imageUrl);
   
   // If it's already a proxied URL or not a MangaNato URL, return as is
   if (imageUrl.includes('/api/image-proxy')) {
-    console.log('getProxiedImageUrl: Already proxied');
     return imageUrl;
   }
   
   if (!imageUrl.includes('manganato')) {
-    console.log('getProxiedImageUrl: Not a MangaNato URL, returning as is');
     return imageUrl;
   }
   
   // Use our image proxy to bypass CORS
-  const proxiedUrl = `/api/image-proxy?url=${encodeURIComponent(imageUrl)}`;
-  console.log('getProxiedImageUrl: Proxied URL:', proxiedUrl);
-  return proxiedUrl;
+  return `/api/image-proxy?url=${encodeURIComponent(imageUrl)}`;
 }
 
 export default function MangaCard({ manga, onRemove, onEdit }: MangaCardProps) {
@@ -54,13 +47,6 @@ export default function MangaCard({ manga, onRemove, onEdit }: MangaCardProps) {
     : 0;
 
   const imageUrl = manga.coverImage ? getProxiedImageUrl(manga.coverImage) : null;
-  
-  console.log('MangaCard render:', {
-    title: manga.title,
-    hasCoverImage: !!manga.coverImage,
-    originalUrl: manga.coverImage,
-    proxiedUrl: imageUrl
-  });
 
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-md transition-shadow">
