@@ -184,17 +184,18 @@
           
           // Validate that we have an actual image URL, not a page URL
           if (coverImage) {
-            // Check if it's a manga page URL (not an image)
-            if (coverImage.includes('/manga/') && !coverImage.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)(\?|$)/i)) {
+            // Check if it's a manga page URL (not an image) - but allow external CDNs
+            if (coverImage.includes('/manga/') && !coverImage.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)(\?|$)/i) && !coverImage.includes('2xstorage.com')) {
               console.warn(`✗ Extracted URL is a manga page, not an image: "${coverImage}"`);
               coverImage = null; // Reset to null if it's a page URL
             }
-            // Check if it looks like an image URL
+            // Check if it looks like an image URL (file extension or known image paths)
             const isImageUrl = coverImage.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)(\?|$)/i) || 
                              coverImage.includes('/cover/') || 
                              coverImage.includes('/thumb/') ||
                              coverImage.includes('/image/') ||
-                             coverImage.includes('/img/');
+                             coverImage.includes('/img/') ||
+                             coverImage.includes('2xstorage.com'); // Allow external CDN URLs
             if (!isImageUrl) {
               console.warn(`✗ Extracted URL doesn't look like an image: "${coverImage}"`);
               coverImage = null; // Reset to null if it doesn't look like an image

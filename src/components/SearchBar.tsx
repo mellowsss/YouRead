@@ -14,8 +14,17 @@ type SearchSource = 'all' | 'mangadex' | 'manganato';
 function getProxiedImageUrl(imageUrl: string | undefined): string {
   if (!imageUrl) return '';
   
-  // If it's already a proxied URL or not a MangaNato URL, return as is
-  if (imageUrl.includes('/api/image-proxy') || !imageUrl.includes('manganato')) {
+  // If it's already a proxied URL, return as is
+  if (imageUrl.includes('/api/image-proxy')) {
+    return imageUrl;
+  }
+  
+  // Allowed domains that need proxying (MangaNato and their CDNs)
+  const needsProxy = imageUrl.includes('manganato') || 
+                    imageUrl.includes('2xstorage.com');
+  
+  if (!needsProxy) {
+    // For other domains (like MangaDex), return as is
     return imageUrl;
   }
   

@@ -26,9 +26,23 @@ export default async function handler(
     // Decode the URL in case it's double-encoded
     let decodedUrl = decodeURIComponent(url);
     
-    // Validate that it's a MangaNato image URL for security
-    if (!decodedUrl.includes('manganato.gg') && !decodedUrl.includes('manganato.com')) {
-      response.status(400).json({ error: 'Invalid URL. Only MangaNato URLs are allowed.' });
+    // Allowed image hosting domains (MangaNato and their image CDNs)
+    const allowedDomains = [
+      'manganato.gg',
+      'manganato.com',
+      '2xstorage.com', // MangaNato's image CDN
+      'img-r1.2xstorage.com',
+      'img-r2.2xstorage.com',
+      'img-r3.2xstorage.com',
+    ];
+    
+    // Validate that it's from an allowed domain
+    const isAllowedDomain = allowedDomains.some(domain => decodedUrl.includes(domain));
+    if (!isAllowedDomain) {
+      response.status(400).json({ 
+        error: 'Invalid URL. Only MangaNato and their image CDN URLs are allowed.',
+        message: `Received domain not in allowed list: ${decodedUrl}`
+      });
       return;
     }
 
@@ -39,7 +53,8 @@ export default async function handler(
                       decodedUrl.includes('/image/') ||
                       decodedUrl.includes('/img/');
     
-    if (!isImageUrl && decodedUrl.includes('/manga/')) {
+    // Only reject if it's a manga page URL (not for external CDNs)
+    if (!isImageUrl && decodedUrl.includes('/manga/') && !decodedUrl.includes('2xstorage.com')) {
       // This is a manga page URL, not an image URL
       response.status(400).json({ 
         error: 'Invalid URL. Expected an image URL, but received a manga page URL.',

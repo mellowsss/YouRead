@@ -13,12 +13,17 @@ function getProxiedImageUrl(imageUrl: string | undefined): string | null {
     return null;
   }
   
-  // If it's already a proxied URL or not a MangaNato URL, return as is
+  // If it's already a proxied URL, return as is
   if (imageUrl.includes('/api/image-proxy')) {
     return imageUrl;
   }
   
-  if (!imageUrl.includes('manganato')) {
+  // Allowed domains that need proxying (MangaNato and their CDNs)
+  const needsProxy = imageUrl.includes('manganato') || 
+                    imageUrl.includes('2xstorage.com');
+  
+  if (!needsProxy) {
+    // For other domains (like MangaDex), return as is
     return imageUrl;
   }
   
