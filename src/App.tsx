@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { BookOpen, Plus } from 'lucide-react';
 import { TrackedManga, MangaSearchResult } from './types';
 import { getMangaDetails } from './services/mangaApi';
@@ -18,9 +18,72 @@ function App() {
   const [editingManga, setEditingManga] = useState<TrackedManga | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [filter, setFilter] = useState<'all' | 'reading' | 'completed' | 'paused' | 'planning'>('all');
+  const trackedMangaRef = useRef<TrackedManga[]>([]);
+
+  // Keep ref in sync with state
+  useEffect(() => {
+    trackedMangaRef.current = trackedManga;
+  }, [trackedManga]);
+
+  const handleExtensionManga = (manga: TrackedManga) => {
+    // Check if manga already exists
+    const existing = trackedMangaRef.current.find(m => m.id === manga.id);
+    
+    if (!existing) {
+      const newManga: TrackedManga = {
+        ...manga,
+        readingStatus: manga.readingStatus || 'planning',
+        dateAdded: manga.dateAdded || new Date().toISOString(),
+        lastUpdated: new Date().toISOString(),
+      };
+      addTrackedManga(newManga);
+      setTrackedManga(getTrackedManga());
+      
+      // Show notification (you can replace with a toast library)
+      alert(`Added "${newManga.title}" to your library!`);
+    } else {
+      // Update existing manga
+      handleUpdateManga(existing.id, {
+        ...manga,
+        lastUpdated: new Date().toISOString(),
+      });
+      alert(`Updated "${manga.title}" in your library!`);
+    }
+  };
+
+  const handleExtensionMessage = (event: MessageEvent) => {
+    // Only accept messages from same origin
+    if (event.origin !== window.location.origin) return;
+    
+    if (event.data.type === 'ADD_MANGA') {
+      handleExtensionManga(event.data.manga as TrackedManga);
+    }
+  };
 
   useEffect(() => {
     setTrackedManga(getTrackedManga());
+    
+    // Check for manga data from extension (URL parameter)
+    const urlParams = new URLSearchParams(window.location.search);
+    const mangaParam = urlParams.get('manga');
+    
+    if (mangaParam) {
+      try {
+        const manga = JSON.parse(decodeURIComponent(mangaParam));
+        handleExtensionManga(manga);
+        // Clean up URL
+        window.history.replaceState({}, document.title, window.location.pathname);
+      } catch (error) {
+        console.error('Error parsing manga from extension:', error);
+      }
+    }
+
+    // Listen for messages from extension
+    window.addEventListener('message', handleExtensionMessage);
+    
+    return () => {
+      window.removeEventListener('message', handleExtensionMessage);
+    };
   }, []);
 
   const handleSelectManga = async (mangaResult: MangaSearchResult) => {

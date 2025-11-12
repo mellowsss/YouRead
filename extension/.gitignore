@@ -1,0 +1,4 @@
+# Icons (user should create these)
+icons/*.png
+!icons/create-icons.html
+
