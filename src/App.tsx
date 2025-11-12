@@ -57,6 +57,68 @@ function App() {
     
     if (event.data.type === 'ADD_MANGA') {
       handleExtensionManga(event.data.manga as TrackedManga);
+    } else if (event.data.type === 'BULK_IMPORT') {
+      handleBulkImport(event.data.mangaList as TrackedManga[]);
+    }
+  };
+
+  const handleBulkImport = (mangaList: Partial<TrackedManga>[]) => {
+    if (!Array.isArray(mangaList) || mangaList.length === 0) {
+      console.error('Invalid manga list:', mangaList);
+      return;
+    }
+    
+    let added = 0;
+    let updated = 0;
+    const currentManga = getTrackedManga();
+    
+    mangaList.forEach((manga) => {
+      if (!manga.id || !manga.title) {
+        console.warn('Skipping invalid manga:', manga);
+        return;
+      }
+      
+      const existing = currentManga.find(m => m.id === manga.id);
+      
+      if (!existing) {
+        const newManga: TrackedManga = {
+          id: manga.id,
+          title: manga.title,
+          coverImage: manga.coverImage,
+          manganatoUrl: manga.manganatoUrl,
+          lastReadChapter: manga.lastReadChapter,
+          totalChapters: manga.totalChapters || manga.chapters,
+          readingStatus: manga.lastReadChapter ? 'reading' : 'planning',
+          dateAdded: new Date().toISOString(),
+          lastUpdated: new Date().toISOString(),
+        };
+        addTrackedManga(newManga);
+        added++;
+      } else {
+        // Update existing with new chapter info
+        const updates: Partial<TrackedManga> = {
+          lastReadChapter: manga.lastReadChapter !== undefined 
+            ? Math.max(manga.lastReadChapter, existing.lastReadChapter || 0)
+            : existing.lastReadChapter,
+          totalChapters: manga.totalChapters || manga.chapters || existing.totalChapters,
+          lastUpdated: new Date().toISOString(),
+        };
+        if (manga.lastReadChapter && manga.lastReadChapter > (existing.lastReadChapter || 0)) {
+          updates.readingStatus = 'reading';
+        }
+        updateTrackedManga(existing.id, updates);
+        updated++;
+      }
+    });
+    
+    // Refresh the list
+    setTrackedManga(getTrackedManga());
+    
+    // Show success message
+    if (added > 0 || updated > 0) {
+      alert(`Successfully imported ${added} new manga and updated ${updated} existing manga!`);
+    } else {
+      alert('No manga were imported. They may already be in your library.');
     }
   };
 
@@ -66,8 +128,37 @@ function App() {
     // Check for manga data from extension (URL parameter)
     const urlParams = new URLSearchParams(window.location.search);
     const mangaParam = urlParams.get('manga');
+    const bulkImportParam = urlParams.get('bulkImport');
     
-    if (mangaParam) {
+    // Handle bulk import from history
+    if (bulkImportParam) {
+      try {
+        // Decode and parse the manga list
+        let mangaList;
+        try {
+          mangaList = JSON.parse(decodeURIComponent(bulkImportParam));
+        } catch (parseError) {
+          // Try without decoding first (in case it's already decoded)
+          mangaList = JSON.parse(bulkImportParam);
+        }
+        
+        if (Array.isArray(mangaList) && mangaList.length > 0) {
+          console.log(`Importing ${mangaList.length} manga...`);
+          handleBulkImport(mangaList);
+          // Clean up URL
+          window.history.replaceState({}, document.title, window.location.pathname);
+        } else {
+          console.error('Invalid bulk import data:', mangaList);
+          alert('No valid manga data found to import.');
+        }
+      } catch (error) {
+        console.error('Error parsing bulk import:', error);
+        console.error('Raw parameter:', bulkImportParam.substring(0, 200));
+        alert(`Error importing manga: ${error.message}. Check console for details.`);
+      }
+    }
+    // Handle single manga
+    else if (mangaParam) {
       try {
         const manga = JSON.parse(decodeURIComponent(mangaParam));
         handleExtensionManga(manga);

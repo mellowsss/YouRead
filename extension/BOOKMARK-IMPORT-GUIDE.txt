@@ -1,0 +1,47 @@
+==========================================
+HOW TO IMPORT ALL YOUR MANGA FROM BOOKMARKS
+==========================================
+
+YOUR BOOKMARK PAGE: https://www.manganato.gg/bookmark
+
+STEP 1: Make sure you're logged in
+- Go to https://www.manganato.gg/bookmark
+- Make sure you can see your bookmarked manga
+- Each entry shows:
+  * Title
+  * "Viewed : Chapter X" (last chapter you read)
+  * "Current : Chapter Y" (latest available chapter)
+
+STEP 2: Import from each page
+1. Go to your bookmark page (page 1)
+2. Click the YouRead extension icon
+3. You'll see: "Found X manga in history!"
+4. Click "Import X Manga to YouRead"
+5. All manga from that page will be imported with:
+   - Title
+   - Cover image
+   - Last read chapter (from "Viewed : Chapter X")
+   - Total chapters (from "Current : Chapter Y")
+   - MangaNato URL
+
+STEP 3: Repeat for all pages
+- If you have multiple pages, go to page 2 → Click extension → Import
+- Go to page 3 → Import
+- Continue until all pages are imported
+
+WHAT GETS IMPORTED:
+✓ Manga title
+✓ Last read chapter (from "Viewed" column)
+✓ Latest available chapter (from "Current" column)
+✓ Cover image
+✓ MangaNato bookmark link
+✓ Reading status (automatically set to "reading" if you have a last read chapter)
+
+TIPS:
+- Make sure you're logged into MangaNato
+- The extension will automatically detect the bookmark page
+- If it doesn't detect manga, refresh the page and try again
+- You can import from multiple pages - just go to each page and import
+
+That's it! All your manga with reading progress will be imported automatically!
+

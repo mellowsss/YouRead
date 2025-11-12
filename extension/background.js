@@ -8,9 +8,70 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'MANGA_DETECTED') {
     handleMangaDetected(message.manga, message.url);
     sendResponse({ success: true });
+  } else if (message.type === 'HISTORY_DETECTED') {
+    handleHistoryDetected(message.mangaList, message.url);
+    sendResponse({ success: true });
+  } else if (message.type === 'IMPORT_HISTORY') {
+    importHistoryFromPage(message.tabId).then(result => {
+      sendResponse(result);
+    }).catch(error => {
+      sendResponse({ success: false, error: error.message });
+    });
+    return true; // Keep channel open for async
   }
   return true; // Keep the message channel open for async response
 });
+
+// Handle detected history
+async function handleHistoryDetected(mangaList, url) {
+  try {
+    await chrome.storage.local.set({
+      detectedHistory: mangaList,
+      detectedHistoryUrl: url,
+      detectedHistoryTime: Date.now()
+    });
+    
+    chrome.action.setBadgeText({ text: `${mangaList.length}` });
+    chrome.action.setBadgeBackgroundColor({ color: '#0ea5e9' });
+  } catch (error) {
+    console.error('Error handling history detection:', error);
+  }
+}
+
+// Import history from a page
+async function importHistoryFromPage(tabId) {
+  try {
+    // First, make sure content script is injected
+    const tab = await chrome.tabs.get(tabId);
+    if (!tab.url?.includes('manganato')) {
+      return { success: false, error: 'Not on MangaNato page' };
+    }
+    
+    // Wait for page to be ready
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    // Try to send message to content script with retries
+    let lastError = null;
+    for (let i = 0; i < 3; i++) {
+      try {
+        const results = await chrome.tabs.sendMessage(tabId, { type: 'EXTRACT_HISTORY' });
+        if (results && results.mangaList !== undefined) {
+          return { success: true, mangaList: results.mangaList || [] };
+        }
+      } catch (sendError) {
+        lastError = sendError;
+        // Wait before retry
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    }
+    
+    // If all retries failed
+    throw lastError || new Error('Could not communicate with content script');
+  } catch (error) {
+    console.error('Error importing history:', error);
+    return { success: false, error: error.message };
+  }
+}
 
 // Handle detected manga
 async function handleMangaDetected(manga, url) {

@@ -1,0 +1,37 @@
+==========================================
+QUICK INSTALL - Load Extension in Chrome
+==========================================
+
+STEP 1: Extract the ZIP file
+- Unzip "extension.zip" to get the "extension" folder
+
+STEP 2: Create Icons (IMPORTANT!)
+- Open "icons/generate-logo-icons.html" in your browser
+- Click "Generate Icons" button
+- Right-click each canvas and "Save image as..."
+- Save as: icon16.png, icon48.png, icon128.png
+- Put them in the "icons" folder
+
+STEP 3: Load in Chrome
+1. Open Chrome
+2. Go to: chrome://extensions/
+3. Turn ON "Developer mode" (toggle in top right)
+4. Click "Load unpacked"
+5. Select the "extension" folder
+6. Done! Extension is now installed
+
+STEP 4: Configure (Optional)
+- Update the YouRead URL in:
+  * background.js (line 3)
+  * content.js (line 5)
+  * popup.js (line 3)
+- Change to your actual YouRead website URL
+
+STEP 5: Use It!
+1. Visit any MangaNato manga page
+2. Click the extension icon in Chrome toolbar
+3. Click "Add to YouRead"
+4. Your manga will be added!
+
+That's it! No need to publish to Chrome Store if you just want to use it yourself.
+

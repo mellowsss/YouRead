@@ -12,7 +12,7 @@
     "https://www.manganato.gg/*",
     "https://manganato.com/*",
     "https://*.vercel.app/*",
-    "http://localhost:*"
+    "http://localhost/*"
   ],
   "background": {
     "service_worker": "background.js"
