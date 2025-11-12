@@ -32,6 +32,22 @@ export default async function handler(
       return;
     }
 
+    // Check if it's actually an image URL, not a page URL
+    const isImageUrl = decodedUrl.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)(\?|$)/i) || 
+                      decodedUrl.includes('/cover/') || 
+                      decodedUrl.includes('/thumb/') ||
+                      decodedUrl.includes('/image/') ||
+                      decodedUrl.includes('/img/');
+    
+    if (!isImageUrl && decodedUrl.includes('/manga/')) {
+      // This is a manga page URL, not an image URL
+      response.status(400).json({ 
+        error: 'Invalid URL. Expected an image URL, but received a manga page URL.',
+        message: `Received: ${decodedUrl}. Please provide an actual image URL.`
+      });
+      return;
+    }
+
     console.log('Image proxy: Fetching image from:', decodedUrl);
 
     // Fetch the image with proper headers

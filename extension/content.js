@@ -96,17 +96,33 @@
               const src = img.getAttribute('src') || img.getAttribute('data-src') || '';
               // Skip very small images or icons
               if (src && !src.includes('icon') && !src.includes('logo') && !src.includes('arrow') && !src.includes('next') && !src.includes('prev')) {
+                // Skip manga page URLs - they're not images
+                if (src.includes('/manga/') && !src.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)(\?|$)/i)) {
+                  continue; // Skip this image, it's a page URL
+                }
+                // Prefer URLs that look like images
+                const looksLikeImage = src.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)(\?|$)/i) || 
+                                      src.includes('/cover/') || 
+                                      src.includes('/thumb/') ||
+                                      src.includes('/image/') ||
+                                      src.includes('/img/');
+                if (looksLikeImage || !src.includes('/manga/')) {
+                  coverElement = img;
+                  break;
+                }
+              }
+            }
+            if (coverElement) break;
+            
+            // If no good image found, just use the first one that's not a page URL
+            for (const img of elements) {
+              const src = img.getAttribute('src') || img.getAttribute('data-src') || '';
+              if (src && !src.includes('/manga/') || src.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)(\?|$)/i)) {
                 coverElement = img;
                 break;
               }
             }
             if (coverElement) break;
-            
-            // If no good image found, just use the first one
-            if (elements.length > 0) {
-              coverElement = elements[0];
-              break;
-            }
           }
           
           let coverImage = null;
@@ -166,6 +182,25 @@
             }
           }
           
+          // Validate that we have an actual image URL, not a page URL
+          if (coverImage) {
+            // Check if it's a manga page URL (not an image)
+            if (coverImage.includes('/manga/') && !coverImage.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)(\?|$)/i)) {
+              console.warn(`✗ Extracted URL is a manga page, not an image: "${coverImage}"`);
+              coverImage = null; // Reset to null if it's a page URL
+            }
+            // Check if it looks like an image URL
+            const isImageUrl = coverImage.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)(\?|$)/i) || 
+                             coverImage.includes('/cover/') || 
+                             coverImage.includes('/thumb/') ||
+                             coverImage.includes('/image/') ||
+                             coverImage.includes('/img/');
+            if (!isImageUrl) {
+              console.warn(`✗ Extracted URL doesn't look like an image: "${coverImage}"`);
+              coverImage = null; // Reset to null if it doesn't look like an image
+            }
+          }
+          
           // Log for debugging
           if (coverImage) {
             console.log(`✓ Extracted cover image for "${title}":`, coverImage);
@@ -178,7 +213,8 @@
                 src: img.getAttribute('src'),
                 dataSrc: img.getAttribute('data-src'),
                 className: img.className,
-                parent: img.parentElement?.tagName
+                parent: img.parentElement?.tagName,
+                isPageUrl: (img.getAttribute('src') || '').includes('/manga/') && !(img.getAttribute('src') || '').match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)(\?|$)/i)
               }))
             );
           }
