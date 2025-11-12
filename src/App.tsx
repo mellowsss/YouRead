@@ -87,16 +87,18 @@ function App() {
         
         if (!existing) {
           // Log image URL for debugging
-          if (manga.coverImage) {
-            console.log(`Adding manga with cover image: ${manga.title}`, manga.coverImage);
-          } else {
-            console.warn(`No cover image for manga: ${manga.title}`);
-          }
+          console.log(`Adding manga: ${manga.title}`, {
+            id: manga.id,
+            coverImage: manga.coverImage,
+            hasCoverImage: !!manga.coverImage,
+            coverImageType: typeof manga.coverImage,
+            coverImageLength: manga.coverImage?.length
+          });
           
           const newManga: TrackedManga = {
             id: manga.id,
             title: manga.title,
-            coverImage: manga.coverImage,
+            coverImage: manga.coverImage, // Keep original URL - proxy will be applied in component
             manganatoUrl: manga.manganatoUrl,
             lastReadChapter: manga.lastReadChapter,
             totalChapters: manga.totalChapters || manga.chapters,

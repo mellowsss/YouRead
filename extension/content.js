@@ -168,9 +168,19 @@
           
           // Log for debugging
           if (coverImage) {
-            console.log(`Extracted cover image for ${title}:`, coverImage);
+            console.log(`✓ Extracted cover image for "${title}":`, coverImage);
           } else {
-            console.warn(`No cover image found for ${title}`);
+            console.warn(`✗ No cover image found for "${title}"`);
+            // Try to find any image in the item for debugging
+            const allImages = item.querySelectorAll('img');
+            console.log(`  Found ${allImages.length} total images in item:`, 
+              Array.from(allImages).map(img => ({
+                src: img.getAttribute('src'),
+                dataSrc: img.getAttribute('data-src'),
+                className: img.className,
+                parent: img.parentElement?.tagName
+              }))
+            );
           }
           
           const fullCoverImage = coverImage || undefined;
