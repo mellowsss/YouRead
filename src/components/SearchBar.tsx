@@ -10,6 +10,19 @@ interface SearchBarProps {
 
 type SearchSource = 'all' | 'mangadex' | 'manganato';
 
+// Get proxied image URL to bypass CORS
+function getProxiedImageUrl(imageUrl: string | undefined): string {
+  if (!imageUrl) return '';
+  
+  // If it's already a proxied URL or not a MangaNato URL, return as is
+  if (imageUrl.includes('/api/image-proxy') || !imageUrl.includes('manganato')) {
+    return imageUrl;
+  }
+  
+  // Use our image proxy to bypass CORS
+  return `/api/image-proxy?url=${encodeURIComponent(imageUrl)}`;
+}
+
 export default function SearchBar({ onSelectManga }: SearchBarProps) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<MangaSearchResult[]>([]);
@@ -163,7 +176,7 @@ export default function SearchBar({ onSelectManga }: SearchBarProps) {
                 >
                   {manga.coverImage && (
                     <img
-                      src={manga.coverImage}
+                      src={getProxiedImageUrl(manga.coverImage)}
                       alt={manga.title}
                       className="w-12 h-16 object-cover rounded"
                     />

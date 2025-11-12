@@ -4,7 +4,7 @@
   'use strict';
 
   // Configuration - Update this with your YouRead website URL
-  const YOUREAD_URL = 'https://you-read-a9v7w7ug5-mellowsss-projects.vercel.app';
+  const YOUREAD_URL = 'https://you-read-iota.vercel.app';
   // For local development, use: 'http://localhost:5173'
 
   // Extract manga from bookmark/history page
@@ -31,7 +31,9 @@
         '[class*="story-item"], ' +
         '.panel-content-history .item-story, ' +
         'table tbody tr, ' +
-        '.list-story .item-story'
+        '.list-story .item-story, ' +
+        'tbody tr[itemscope], ' +
+        '.table-story-list tbody tr'
       );
       
       items.forEach((item) => {
@@ -65,17 +67,113 @@
           
           if (!title) return;
           
-          // Get cover image - try multiple selectors
-          const coverElement = item.querySelector('img');
-          const coverImage = coverElement?.getAttribute('src') || 
-                           coverElement?.getAttribute('data-src') || 
-                           coverElement?.getAttribute('data-original') ||
-                           undefined;
-          const fullCoverImage = coverImage?.startsWith('http') 
-            ? coverImage 
-            : coverImage 
-              ? `https://www.manganato.gg${coverImage}` 
-              : undefined;
+          console.log(`Processing manga: ${title}`);
+          
+          // Get cover image - try multiple selectors and attributes
+          let coverElement = null;
+          
+          // Try specific selectors first - look for images in common locations
+          const imageSelectors = [
+            'td img',  // Table cell images (common in bookmark pages)
+            'a img',   // Images inside links
+            '.item-img img',
+            '.story-img img',
+            '.bookmark-img img',
+            '.item-story img',
+            'img[src*="cover"]',
+            'img[src*="manga"]',
+            'img[src*="story"]',
+            'img[src*="thumb"]',
+            'img[width]',  // Images with width attribute (usually thumbnails)
+            'img[height]', // Images with height attribute
+            'img'          // Any image as last resort
+          ];
+          
+          for (const selector of imageSelectors) {
+            const elements = item.querySelectorAll(selector);
+            // Prefer images that look like covers (have width/height or are in specific containers)
+            for (const img of elements) {
+              const src = img.getAttribute('src') || img.getAttribute('data-src') || '';
+              // Skip very small images or icons
+              if (src && !src.includes('icon') && !src.includes('logo') && !src.includes('arrow') && !src.includes('next') && !src.includes('prev')) {
+                coverElement = img;
+                break;
+              }
+            }
+            if (coverElement) break;
+            
+            // If no good image found, just use the first one
+            if (elements.length > 0) {
+              coverElement = elements[0];
+              break;
+            }
+          }
+          
+          let coverImage = null;
+          
+          if (coverElement) {
+            // Try all possible image attributes
+            const imageAttrs = ['src', 'data-src', 'data-original', 'data-lazy-src', 'data-url', 'data-image'];
+            for (const attr of imageAttrs) {
+              const imgUrl = coverElement.getAttribute(attr);
+              if (imgUrl && imgUrl.trim()) {
+                coverImage = imgUrl.trim();
+                break;
+              }
+            }
+            
+            // If still no image, try getting from style background-image
+            if (!coverImage) {
+              const style = coverElement.getAttribute('style') || window.getComputedStyle(coverElement).backgroundImage;
+              if (style && style.includes('url(')) {
+                const match = style.match(/url\(['"]?([^'"]+)['"]?\)/);
+                if (match && match[1]) {
+                  coverImage = match[1];
+                }
+              }
+            }
+          }
+          
+          // If image is a relative path, make it absolute
+          if (coverImage && !coverImage.startsWith('http')) {
+            if (coverImage.startsWith('//')) {
+              coverImage = 'https:' + coverImage;
+            } else if (coverImage.startsWith('/')) {
+              coverImage = 'https://www.manganato.gg' + coverImage;
+            } else {
+              coverImage = 'https://www.manganato.gg/' + coverImage;
+            }
+          }
+          
+          // Clean up the URL but keep it valid
+          if (coverImage) {
+            try {
+              const url = new URL(coverImage);
+              // Don't remove query params - they might be needed for the image
+              // Just ensure it's a valid URL
+              coverImage = url.toString();
+            } catch (e) {
+              // If URL parsing fails, try to fix it
+              if (coverImage && !coverImage.startsWith('http')) {
+                if (coverImage.startsWith('//')) {
+                  coverImage = 'https:' + coverImage;
+                } else if (coverImage.startsWith('/')) {
+                  coverImage = 'https://www.manganato.gg' + coverImage;
+                } else {
+                  coverImage = 'https://www.manganato.gg/' + coverImage;
+                }
+              }
+            }
+          }
+          
+          // Log for debugging
+          if (coverImage) {
+            console.log(`Extracted cover image for ${title}:`, coverImage);
+          } else {
+            console.warn(`No cover image found for ${title}`);
+          }
+          
+          const fullCoverImage = coverImage || undefined;
           
           // Get last read chapter from "Viewed : Chapter X" text
           let lastReadChapter = undefined;
@@ -240,22 +338,75 @@
     if (message.type === 'EXTRACT_HISTORY') {
       try {
         const historyManga = extractHistoryManga();
-        sendResponse({ mangaList: historyManga || [] });
+        const response = { mangaList: historyManga || [] };
+        sendResponse(response);
       } catch (error) {
         console.error('Error in EXTRACT_HISTORY:', error);
-        sendResponse({ mangaList: [], error: error.message });
+        const response = { mangaList: [], error: error.message };
+        sendResponse(response);
       }
       return true; // Keep channel open for async response
     } else if (message.type === 'GET_NEXT_PAGE_URL') {
-      // Find next page link
-      const nextPageLink = document.querySelector('a[href*="page="], .page-next a, .pagination a:last-child');
-      if (nextPageLink) {
-        const href = nextPageLink.getAttribute('href');
-        const nextUrl = href?.startsWith('http') ? href : `https://www.manganato.gg${href}`;
-        sendResponse({ nextUrl: nextUrl });
-      } else {
-        sendResponse({ nextUrl: null });
+      // Get current page number from URL
+      const currentUrl = window.location.href;
+      const pageMatch = currentUrl.match(/[?&]page=(\d+)/);
+      const currentPageNum = pageMatch ? parseInt(pageMatch[1], 10) : 1;
+      const nextPageNum = currentPageNum + 1;
+      
+      // Check if there's actually a next page by looking for pagination
+      // But first, always try to construct the URL manually (simpler and more reliable)
+      const baseUrl = currentUrl.split('?')[0].split('#')[0];
+      const urlParams = new URLSearchParams(window.location.search);
+      urlParams.set('page', String(nextPageNum));
+      const constructedUrl = `${baseUrl}?${urlParams.toString()}`;
+      
+      // Check if next page link exists in the DOM (to verify there's a next page)
+      let hasNextPage = false;
+      const selectors = [
+        'a.page-next',
+        '.page-next a',
+        'a[title="Next"]',
+        'a[title="next"]',
+        '.pagination a',
+        'a[href*="page="]',
+        '.page-selection a',
+        '.paging a'
+      ];
+      
+      // Look for a link that points to the next page number
+      for (const selector of selectors) {
+        const links = Array.from(document.querySelectorAll(selector));
+        const nextLink = links.find(link => {
+          const href = link.getAttribute('href') || '';
+          const linkPageMatch = href.match(/[?&]page=(\d+)/);
+          if (linkPageMatch) {
+            const linkPageNum = parseInt(linkPageMatch[1], 10);
+            return linkPageNum === nextPageNum;
+          }
+          // Check if link text is the next page number
+          const text = (link.textContent?.trim() || '');
+          if (text === String(nextPageNum)) {
+            return true;
+          }
+          // Check for "next" text
+          const lowerText = text.toLowerCase();
+          if (lowerText === 'next' || lowerText === '»' || lowerText === '→') {
+            return true;
+          }
+          return false;
+        });
+        if (nextLink) {
+          hasNextPage = true;
+          break;
+        }
       }
+      
+      // If we found a next page link, use the constructed URL
+      // Otherwise, check if we're on the last page by looking at the current page number
+      // and whether there are more manga items visible
+      // Always return the constructed URL (we'll detect empty pages later)
+      const response = { nextUrl: constructedUrl };
+      sendResponse(response);
       return true;
     }
     return false;

@@ -7,6 +7,19 @@ interface MangaCardProps {
   onEdit: (manga: TrackedManga) => void;
 }
 
+// Get proxied image URL to bypass CORS
+function getProxiedImageUrl(imageUrl: string | undefined): string {
+  if (!imageUrl) return '';
+  
+  // If it's already a proxied URL or not a MangaNato URL, return as is
+  if (imageUrl.includes('/api/image-proxy') || !imageUrl.includes('manganato')) {
+    return imageUrl;
+  }
+  
+  // Use our image proxy to bypass CORS
+  return `/api/image-proxy?url=${encodeURIComponent(imageUrl)}`;
+}
+
 export default function MangaCard({ manga, onRemove, onEdit }: MangaCardProps) {
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -32,15 +45,31 @@ export default function MangaCard({ manga, onRemove, onEdit }: MangaCardProps) {
       <div className="flex gap-4">
         {manga.coverImage ? (
           <img
-            src={manga.coverImage}
+            src={getProxiedImageUrl(manga.coverImage)}
             alt={manga.title}
             className="w-24 h-32 object-cover rounded flex-shrink-0"
+            onError={(e) => {
+              // If image fails to load, hide it and show placeholder
+              const target = e.target as HTMLImageElement;
+              console.error('Image failed to load:', manga.coverImage);
+              target.style.display = 'none';
+              const placeholder = target.nextElementSibling as HTMLElement;
+              if (placeholder) {
+                placeholder.style.display = 'flex';
+              }
+            }}
+            onLoad={() => {
+              console.log('Image loaded successfully:', manga.coverImage);
+            }}
+            loading="lazy"
           />
-        ) : (
-          <div className="w-24 h-32 bg-gray-200 rounded flex items-center justify-center flex-shrink-0">
-            <BookOpen className="w-8 h-8 text-gray-400" />
-          </div>
-        )}
+        ) : null}
+        <div 
+          className="w-24 h-32 bg-gray-200 rounded flex items-center justify-center flex-shrink-0"
+          style={{ display: manga.coverImage ? 'none' : 'flex' }}
+        >
+          <BookOpen className="w-8 h-8 text-gray-400" />
+        </div>
 
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-4 mb-2">

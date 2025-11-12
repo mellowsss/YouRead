@@ -1,6 +1,6 @@
 // Popup script for YouRead extension
 
-const YOUREAD_URL = 'https://you-read-a9v7w7ug5-mellowsss-projects.vercel.app';
+const YOUREAD_URL = 'https://you-read-iota.vercel.app';
 
 // Initialize popup
 async function initPopup() {
@@ -90,7 +90,46 @@ async function showHistoryImport(tab, statusDiv, mangaInfoDiv, actionsDiv) {
       `;
       
       document.getElementById('importAllPages').addEventListener('click', async () => {
-        await importHistoryToYouRead(detectedHistory, tab);
+        // Update UI immediately
+        const statusDiv = document.getElementById('status');
+        if (statusDiv) {
+          statusDiv.innerHTML = '<div class="status info">🔄 Starting import... This will continue in the background.</div>';
+        }
+        
+        // Send message to background script to handle import
+        // This ensures it continues even if popup closes
+        chrome.runtime.sendMessage({
+          type: 'START_BULK_IMPORT',
+          mangaList: detectedHistory,
+          tabId: tab.id
+        }, (response) => {
+          if (chrome.runtime.lastError) {
+            console.error('Error sending message to background:', chrome.runtime.lastError);
+            // Fallback: try direct import
+            if (statusDiv) {
+              statusDiv.innerHTML = '<div class="status info">🔄 Using fallback method...</div>';
+            }
+            importHistoryToYouRead(detectedHistory, tab).catch(err => {
+              console.error('Import error:', err);
+              if (statusDiv) {
+                statusDiv.innerHTML = '<div class="status error">Error: ' + (err.message || 'Unknown error') + '</div>';
+              }
+            });
+          } else {
+            console.log('Background import started:', response);
+            if (statusDiv) {
+              statusDiv.innerHTML = '<div class="status success">✓ Import started! This will continue in the background. You can close this popup.</div>';
+            }
+            // Don't close immediately - let user see the message
+            setTimeout(() => {
+              try {
+                window.close();
+              } catch (e) {
+                // Already closed
+              }
+            }, 3000);
+          }
+        });
       });
       
       document.getElementById('importCurrentPage').addEventListener('click', async () => {
@@ -130,31 +169,74 @@ async function showHistoryImport(tab, statusDiv, mangaInfoDiv, actionsDiv) {
       
       // Request content script to extract history directly
       try {
-        // Wait a bit for content script to be ready
-        await new Promise(resolve => setTimeout(resolve, 500));
+        // Ensure content script is injected
+        let scriptInjected = false;
+        for (let injectRetry = 0; injectRetry < 5; injectRetry++) {
+          try {
+            await chrome.scripting.executeScript({
+              target: { tabId: tab.id },
+              files: ['content.js']
+            });
+            scriptInjected = true;
+            console.log('Content script injected successfully');
+            break;
+          } catch (injectError) {
+            console.log(`Content script injection attempt ${injectRetry + 1}/5:`, injectError.message);
+            if (injectRetry < 4) {
+              await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+          }
+        }
         
-        const response = await chrome.tabs.sendMessage(tab.id, { type: 'EXTRACT_HISTORY' });
+        // Wait for content script to be ready
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        let response;
+        let retries = 0;
+        while (retries < 10) {
+          try {
+            response = await chrome.tabs.sendMessage(tab.id, { type: 'EXTRACT_HISTORY' });
+            if (response && response.mangaList !== undefined) {
+              break;
+            }
+          } catch (err) {
+            retries++;
+            const errorMsg = err instanceof Error ? err.message : String(err);
+            console.log(`Retry ${retries}/10: ${errorMsg}`);
+            
+            if (retries < 10) {
+              // Try re-injecting script if connection fails
+              if (errorMsg.includes('Could not establish connection') || errorMsg.includes('Receiving end')) {
+                console.log('Connection error, re-injecting content script...');
+                try {
+                  await chrome.scripting.executeScript({
+                    target: { tabId: tab.id },
+                    files: ['content.js']
+                  });
+                  await new Promise(resolve => setTimeout(resolve, 2000));
+                } catch (reInjectError) {
+                  console.log('Re-injection failed:', reInjectError.message);
+                }
+              }
+              await new Promise(resolve => setTimeout(resolve, 2000));
+            } else {
+              throw err;
+            }
+          }
+        }
         
         if (response && response.mangaList && response.mangaList.length > 0) {
           await chrome.storage.local.set({ detectedHistory: response.mangaList });
           showHistoryImport(tab, statusDiv, mangaInfoDiv, actionsDiv);
         } else {
-          // Try one more time after waiting
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          const retryResponse = await chrome.tabs.sendMessage(tab.id, { type: 'EXTRACT_HISTORY' });
-          
-          if (retryResponse && retryResponse.mangaList && retryResponse.mangaList.length > 0) {
-            await chrome.storage.local.set({ detectedHistory: retryResponse.mangaList });
-            showHistoryImport(tab, statusDiv, mangaInfoDiv, actionsDiv);
-          } else {
-            statusDiv.innerHTML = '<div class="status error">No manga found on this page</div>';
-            mangaInfoDiv.innerHTML = '<p style="color: #6b7280; font-size: 12px;">Make sure you\'re logged in and on the MangaNato bookmark page: https://www.manganato.gg/bookmark</p>';
-          }
+          statusDiv.innerHTML = '<div class="status error">No manga found on this page</div>';
+          mangaInfoDiv.innerHTML = '<p style="color: #6b7280; font-size: 12px;">Make sure you\'re logged in and on the MangaNato bookmark page: https://www.manganato.gg/bookmark</p>';
         }
       } catch (error) {
         console.error('Error extracting history:', error);
+        const errorMsg = error instanceof Error ? error.message : String(error);
         statusDiv.innerHTML = '<div class="status error">Error: Could not read bookmark page</div>';
-        mangaInfoDiv.innerHTML = '<p style="color: #6b7280; font-size: 12px;">Please refresh the bookmark page and try again. Make sure you\'re logged into MangaNato.</p>';
+        mangaInfoDiv.innerHTML = `<p style="color: #6b7280; font-size: 12px;">${errorMsg}. Please refresh the bookmark page and try again. Make sure you're logged into MangaNato.</p>`;
       }
     }
   } catch (error) {
@@ -164,55 +246,245 @@ async function showHistoryImport(tab, statusDiv, mangaInfoDiv, actionsDiv) {
 }
 
 // Import all pages of history
-async function importAllPages(tab, mangaList, maxPages = 20) {
+async function importAllPages(tab, mangaList, maxPages = 50) {
   try {
     const allManga = [...mangaList];
     let currentPage = 1;
     let hasMorePages = true;
+    let consecutiveEmptyPages = 0;
     
-    while (hasMorePages && currentPage < maxPages) {
+    console.log(`Starting import from page ${currentPage} with ${mangaList.length} initial manga`);
+    
+    // Process first page (already have mangaList)
+    // Then continue with remaining pages
+    while (hasMorePages && currentPage < maxPages && consecutiveEmptyPages < 2) {
       try {
+        console.log(`Processing page ${currentPage}...`);
+        
+        // Always ensure content script is injected before extracting
+        console.log(`Ensuring content script is ready for page ${currentPage}...`);
+        
         // Wait for page to be ready
-        await new Promise(resolve => setTimeout(resolve, 1500));
+        if (currentPage > 1) {
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+        
+        // Inject content script (always, to ensure it's ready)
+        let scriptInjected = false;
+        for (let injectRetry = 0; injectRetry < 5; injectRetry++) {
+          try {
+            await chrome.scripting.executeScript({
+              target: { tabId: tab.id },
+              files: ['content.js']
+            });
+            scriptInjected = true;
+            console.log('Content script injected successfully');
+            // Wait for script to initialize
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            break;
+          } catch (injectError) {
+            console.log(`Content script injection attempt ${injectRetry + 1}/5:`, injectError.message);
+            if (injectRetry < 4) {
+              await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+          }
+        }
+        
+        if (!scriptInjected) {
+          console.warn('Could not inject content script, but continuing...');
+        }
         
         // Extract from current page
-        const response = await chrome.tabs.sendMessage(tab.id, { type: 'EXTRACT_HISTORY' });
+        console.log(`Extracting manga from page ${currentPage}...`);
+        let response;
+        let retries = 0;
+        while (retries < 10) {
+          try {
+            // Check if tab is still valid
+            const tabInfo = await chrome.tabs.get(tab.id);
+            if (!tabInfo) {
+              throw new Error('Tab no longer exists');
+            }
+            
+            response = await chrome.tabs.sendMessage(tab.id, { type: 'EXTRACT_HISTORY' });
+            if (response && response.mangaList !== undefined) {
+              console.log(`Extracted ${response.mangaList.length} manga from page ${currentPage}`);
+              break;
+            }
+          } catch (err) {
+            retries++;
+            const errorMsg = err instanceof Error ? err.message : String(err);
+            console.log(`Retry ${retries}/10 for page ${currentPage}: ${errorMsg}`);
+            
+            if (retries < 10) {
+              // Try re-injecting script if connection fails
+              if (errorMsg.includes('Could not establish connection') || errorMsg.includes('Receiving end')) {
+                console.log('Connection error, re-injecting content script...');
+                try {
+                  await chrome.scripting.executeScript({
+                    target: { tabId: tab.id },
+                    files: ['content.js']
+                  });
+                  await new Promise(resolve => setTimeout(resolve, 2000));
+                } catch (reInjectError) {
+                  console.log('Re-injection failed:', reInjectError.message);
+                }
+              }
+              await new Promise(resolve => setTimeout(resolve, 2000));
+            } else {
+              throw err;
+            }
+          }
+        }
         
         if (response && response.mangaList && response.mangaList.length > 0) {
           // Add new manga (avoid duplicates)
+          const beforeCount = allManga.length;
           response.mangaList.forEach(manga => {
             if (!allManga.find(m => m.id === manga.id)) {
               allManga.push(manga);
             }
           });
-        }
-        
-        // Check for next page
-        const nextPageResponse = await chrome.tabs.sendMessage(tab.id, { type: 'GET_NEXT_PAGE_URL' });
-        
-        if (nextPageResponse && nextPageResponse.nextUrl) {
-          // Navigate to next page
-          await chrome.tabs.update(tab.id, { url: nextPageResponse.nextUrl });
-          currentPage++;
+          const newCount = allManga.length - beforeCount;
+          consecutiveEmptyPages = 0; // Reset counter if we found manga
+          
+          console.log(`Page ${currentPage}: Added ${newCount} new manga (${allManga.length} total)`);
           
           // Update status if popup is still open
           try {
             const statusEl = document.getElementById('status');
             if (statusEl) {
-              statusEl.innerHTML = `<div class="status info">Collecting from page ${currentPage}... Found ${allManga.length} manga so far</div>`;
+              statusEl.innerHTML = `<div class="status info">📖 Page ${currentPage}: Found ${newCount} new manga (${allManga.length} total)</div>`;
             }
+            // Also store in chrome.storage for background access
+            await chrome.storage.local.set({ 
+              importStatus: `📖 Page ${currentPage}: Found ${newCount} new manga (${allManga.length} total)`,
+              importTimestamp: Date.now()
+            });
           } catch (e) {
-            // Popup might be closed
+            // Popup might be closed, continue anyway
+            console.log('Popup closed, continuing in background');
+            // Still update storage
+            try {
+              await chrome.storage.local.set({ 
+                importStatus: `📖 Page ${currentPage}: Found ${newCount} new manga (${allManga.length} total)`,
+                importTimestamp: Date.now()
+              });
+            } catch (storageError) {
+              // Ignore storage errors
+            }
           }
         } else {
+          consecutiveEmptyPages++;
+          console.log(`Page ${currentPage}: No manga found (empty pages: ${consecutiveEmptyPages})`);
+          if (consecutiveEmptyPages >= 2) {
+            console.log('Two consecutive empty pages, stopping');
+            hasMorePages = false;
+            break;
+          }
+        }
+        
+        // Check for next page
+        console.log(`Checking for next page after page ${currentPage}...`);
+        let nextPageResponse;
+        retries = 0;
+        while (retries < 3) {
+          try {
+            nextPageResponse = await chrome.tabs.sendMessage(tab.id, { type: 'GET_NEXT_PAGE_URL' });
+            if (nextPageResponse) {
+              break;
+            }
+          } catch (err) {
+            retries++;
+            if (retries < 3) {
+              await new Promise(resolve => setTimeout(resolve, 1500));
+            } else {
+              throw err;
+            }
+          }
+        }
+        
+        if (nextPageResponse && nextPageResponse.nextUrl) {
+          console.log(`Navigating to page ${currentPage + 1}: ${nextPageResponse.nextUrl}`);
+          
+          // Navigate to next page
+          await chrome.tabs.update(tab.id, { url: nextPageResponse.nextUrl });
+          currentPage++;
+          
+          // Wait for navigation to start
+          await new Promise(resolve => setTimeout(resolve, 1500));
+          
+          // Wait for tab to be ready and URL to match
+          let tabReady = false;
+          let readyRetries = 0;
+          while (!tabReady && readyRetries < 30) {
+            try {
+              const tabInfo = await chrome.tabs.get(tab.id);
+              if (tabInfo.status === 'complete') {
+                // Check if URL contains page parameter
+                if (tabInfo.url && tabInfo.url.includes('page=')) {
+                  const urlPageMatch = tabInfo.url.match(/[?&]page=(\d+)/);
+                  const urlPageNum = urlPageMatch ? parseInt(urlPageMatch[1], 10) : null;
+                  if (urlPageNum === currentPage || tabInfo.url === nextPageResponse.nextUrl) {
+                    tabReady = true;
+                    console.log(`Page ${currentPage} loaded: ${tabInfo.url}`);
+                  } else {
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                    readyRetries++;
+                  }
+                } else {
+                  await new Promise(resolve => setTimeout(resolve, 500));
+                  readyRetries++;
+                }
+              } else {
+                await new Promise(resolve => setTimeout(resolve, 500));
+                readyRetries++;
+              }
+            } catch (e) {
+              await new Promise(resolve => setTimeout(resolve, 500));
+              readyRetries++;
+            }
+          }
+          
+          if (!tabReady) {
+            console.warn(`Page ${currentPage} may not be fully loaded, but continuing...`);
+          }
+          
+          // Additional wait for content to render
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          
+          // Re-inject content script after navigation
+          try {
+            await chrome.scripting.executeScript({
+              target: { tabId: tab.id },
+              files: ['content.js']
+            });
+            await new Promise(resolve => setTimeout(resolve, 1500));
+          } catch (injectError) {
+            console.log('Content script injection note:', injectError.message);
+          }
+          
+          // Continue loop to process this new page
+          console.log(`Continuing to process page ${currentPage}...`);
+        } else {
+          console.log('No next page URL found, stopping pagination');
           hasMorePages = false;
         }
       } catch (error) {
         console.error(`Error on page ${currentPage}:`, error);
-        hasMorePages = false;
+        consecutiveEmptyPages++;
+        if (consecutiveEmptyPages >= 2) {
+          console.log('Too many errors, stopping');
+          hasMorePages = false;
+        } else {
+          // Try to continue to next page anyway
+          console.log('Error occurred, but trying to continue...');
+          currentPage++;
+        }
       }
     }
     
+    console.log(`Import complete! Total manga collected: ${allManga.length}`);
     return allManga;
   } catch (error) {
     console.error('Error importing all pages:', error);
@@ -222,29 +494,62 @@ async function importAllPages(tab, mangaList, maxPages = 20) {
 
 // Import history to YouRead
 async function importHistoryToYouRead(mangaList, tab) {
-  const statusDiv = document.getElementById('status');
-  const mangaInfoDiv = document.getElementById('mangaInfo');
+  // Store status in chrome.storage so background can access it
+  const updateStatus = async (message) => {
+    try {
+      await chrome.storage.local.set({ importStatus: message, importTimestamp: Date.now() });
+    } catch (e) {
+      console.log('Could not update status:', e);
+    }
+  };
   
   try {
-    // First, try to collect from all pages
-    statusDiv.innerHTML = '<div class="status info">🔄 Collecting manga from all pages... This may take a moment.</div>';
-    mangaInfoDiv.innerHTML = '<div class="loading">Please wait while we collect all your manga...</div>';
+    // Update status
+    await updateStatus('🔄 Collecting manga from all pages... This may take a moment.');
     
+    // Try to update popup if still open
+    try {
+      const statusDiv = document.getElementById('status');
+      const mangaInfoDiv = document.getElementById('mangaInfo');
+      if (statusDiv) {
+        statusDiv.innerHTML = '<div class="status info">🔄 Collecting manga from all pages... This may take a moment.</div>';
+      }
+      if (mangaInfoDiv) {
+        mangaInfoDiv.innerHTML = '<div class="loading">Please wait while we collect all your manga...</div>';
+      }
+    } catch (e) {
+      // Popup might be closed, continue anyway
+      console.log('Popup closed, continuing in background');
+    }
+    
+    // Import all pages - this will continue even if popup closes
     const allManga = await importAllPages(tab, mangaList);
     
-    statusDiv.innerHTML = `<div class="status success">✓ Collected ${allManga.length} manga from all pages!</div>`;
-    mangaInfoDiv.innerHTML = `<div class="manga-info"><h3>Ready to Import</h3><p>Found <strong>${allManga.length}</strong> total manga</p></div>`;
+    await updateStatus(`✓ Collected ${allManga.length} manga from all pages!`);
     
-    // Store all manga for website to pick up (as backup)
-    await chrome.storage.local.set({ pendingBulkImport: allManga });
+    // Try to update popup if still open
+    try {
+      const statusDiv = document.getElementById('status');
+      const mangaInfoDiv = document.getElementById('mangaInfo');
+      if (statusDiv) {
+        statusDiv.innerHTML = `<div class="status success">✓ Collected ${allManga.length} manga from all pages!</div>`;
+      }
+      if (mangaInfoDiv) {
+        mangaInfoDiv.innerHTML = `<div class="manga-info"><h3>Ready to Import</h3><p>Found <strong>${allManga.length}</strong> total manga</p></div>`;
+      }
+    } catch (e) {
+      // Popup closed, that's okay
+    }
+    
+    // Store all manga for website to pick up
+    await chrome.storage.local.set({ 
+      pendingBulkImport: allManga,
+      bulkImportTimestamp: Date.now()
+    });
     
     // For large imports, use localStorage instead of URL (URLs have length limits)
     if (allManga.length > 50) {
       // Store in extension storage and use a flag
-      await chrome.storage.local.set({ 
-        pendingBulkImport: allManga,
-        bulkImportTimestamp: Date.now()
-      });
       chrome.tabs.create({ 
         url: `${YOUREAD_URL}?bulkImportFlag=true` 
       });
@@ -256,18 +561,43 @@ async function importHistoryToYouRead(mangaList, tab) {
       });
     }
     
-    // Close popup after a short delay
-    setTimeout(() => window.close(), 500);
+    // Close popup after a short delay (if still open)
+    setTimeout(() => {
+      try {
+        window.close();
+      } catch (e) {
+        // Popup already closed
+      }
+    }, 1000);
   } catch (error) {
     console.error('Error importing history:', error);
-    statusDiv.innerHTML = '<div class="status error">Error collecting pages. Importing current page only.</div>';
+    await updateStatus('Error collecting pages. Importing current page only.');
+    
+    // Try to update popup if still open
+    try {
+      const statusDiv = document.getElementById('status');
+      if (statusDiv) {
+        statusDiv.innerHTML = '<div class="status error">Error collecting pages. Importing current page only.</div>';
+      }
+    } catch (e) {
+      // Popup closed
+    }
     
     // Fallback: just import current page
-    await chrome.storage.local.set({ pendingBulkImport: mangaList });
+    await chrome.storage.local.set({ 
+      pendingBulkImport: mangaList,
+      bulkImportTimestamp: Date.now()
+    });
     chrome.tabs.create({ 
       url: `${YOUREAD_URL}?bulkImport=${encodeURIComponent(JSON.stringify(mangaList))}` 
     });
-    setTimeout(() => window.close(), 500);
+    setTimeout(() => {
+      try {
+        window.close();
+      } catch (e) {
+        // Popup already closed
+      }
+    }, 1000);
   }
 }
 

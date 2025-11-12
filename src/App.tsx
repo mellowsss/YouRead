@@ -86,6 +86,13 @@ function App() {
         const existing = currentManga.find(m => m.id === manga.id);
         
         if (!existing) {
+          // Log image URL for debugging
+          if (manga.coverImage) {
+            console.log(`Adding manga with cover image: ${manga.title}`, manga.coverImage);
+          } else {
+            console.warn(`No cover image for manga: ${manga.title}`);
+          }
+          
           const newManga: TrackedManga = {
             id: manga.id,
             title: manga.title,
