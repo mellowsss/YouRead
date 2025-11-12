@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Search, X } from 'lucide-react';
 import { MangaSearchResult } from '../types';
 import { searchManga } from '../services/mangaApi';
@@ -97,10 +97,26 @@ export default function SearchBar({ onSelectManga }: SearchBarProps) {
     }
   };
 
+  useEffect(() => {
+    if (query.trim().length >= 2) {
+      const timeoutId = setTimeout(() => {
+        handleSearch(query);
+      }, 300);
+      return () => clearTimeout(timeoutId);
+    } else {
+      setResults([]);
+      setShowResults(false);
+    }
+  }, [query]);
+  
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setQuery(value);
-    handleSearch(value);
+    setQuery(e.target.value);
+  };
+  
+  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && query.trim().length >= 2) {
+      handleSearch(query);
+    }
   };
 
   const handleSelect = (manga: MangaSearchResult) => {
@@ -156,6 +172,7 @@ export default function SearchBar({ onSelectManga }: SearchBarProps) {
           type="text"
           value={query}
           onChange={handleInputChange}
+          onKeyPress={handleKeyPress}
           placeholder="Search for manga or paste MangaNato URL..."
           className="w-full pl-12 pr-12 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
         />

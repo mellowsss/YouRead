@@ -12,12 +12,14 @@ import {
 import SearchBar from './components/SearchBar';
 import MangaCard from './components/MangaCard';
 import MangaModal from './components/MangaModal';
+import Recommendations from './components/Recommendations';
 
 function App() {
   const [trackedManga, setTrackedManga] = useState<TrackedManga[]>([]);
   const [editingManga, setEditingManga] = useState<TrackedManga | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [filter, setFilter] = useState<'all' | 'reading' | 'completed' | 'paused' | 'planning'>('all');
+  const [currentView, setCurrentView] = useState<'library' | 'recommendations'>('library');
   const trackedMangaRef = useRef<TrackedManga[]>([]);
 
   // Keep ref in sync with state
@@ -402,25 +404,56 @@ function App() {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Filter Tabs */}
+        {/* View Tabs */}
         <div className="flex gap-2 mb-6 overflow-x-auto">
-          {(['all', 'reading', 'completed', 'paused', 'planning'] as const).map((status) => (
-            <button
-              key={status}
-              onClick={() => setFilter(status)}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors whitespace-nowrap ${
-                filter === status
-                  ? 'bg-primary-600 text-white'
-                  : 'bg-white text-gray-700 hover:bg-gray-100'
-              }`}
-            >
-              {status.charAt(0).toUpperCase() + status.slice(1)}
-            </button>
-          ))}
+          <button
+            onClick={() => setCurrentView('library')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors whitespace-nowrap ${
+              currentView === 'library'
+                ? 'bg-primary-600 text-white'
+                : 'bg-white text-gray-700 hover:bg-gray-100'
+            }`}
+          >
+            My Library
+          </button>
+          <button
+            onClick={() => setCurrentView('recommendations')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors whitespace-nowrap ${
+              currentView === 'recommendations'
+                ? 'bg-primary-600 text-white'
+                : 'bg-white text-gray-700 hover:bg-gray-100'
+            }`}
+          >
+            Recommendations
+          </button>
         </div>
 
-        {/* Manga List */}
-        {filteredManga.length === 0 ? (
+        {currentView === 'recommendations' ? (
+          <Recommendations 
+            trackedManga={trackedManga} 
+            onSelectManga={handleSelectManga}
+          />
+        ) : (
+          <>
+            {/* Filter Tabs */}
+            <div className="flex gap-2 mb-6 overflow-x-auto">
+              {(['all', 'reading', 'completed', 'paused', 'planning'] as const).map((status) => (
+                <button
+                  key={status}
+                  onClick={() => setFilter(status)}
+                  className={`px-4 py-2 rounded-lg font-medium transition-colors whitespace-nowrap ${
+                    filter === status
+                      ? 'bg-primary-600 text-white'
+                      : 'bg-white text-gray-700 hover:bg-gray-100'
+                  }`}
+                >
+                  {status.charAt(0).toUpperCase() + status.slice(1)}
+                </button>
+              ))}
+            </div>
+
+            {/* Manga List */}
+            {filteredManga.length === 0 ? (
           <div className="text-center py-16">
             <BookOpen className="w-16 h-16 text-gray-300 mx-auto mb-4" />
             <h3 className="text-xl font-semibold text-gray-900 mb-2">
@@ -449,6 +482,8 @@ function App() {
               />
             ))}
           </div>
+        )}
+          </>
         )}
       </main>
 

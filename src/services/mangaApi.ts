@@ -5,24 +5,36 @@ const MANGADEX_API = 'https://api.mangadex.org';
 
 export async function searchManga(query: string): Promise<MangaSearchResult[]> {
   try {
+    // Use both title and altTitles for better matching
     const response = await fetch(
-      `${MANGADEX_API}/manga?title=${encodeURIComponent(query)}&limit=20&includes[]=cover_art`
+      `${MANGADEX_API}/manga?title=${encodeURIComponent(query)}&limit=20&includes[]=cover_art&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica`
     );
     const data = await response.json();
+    
+    if (!data.data || !Array.isArray(data.data)) {
+      return [];
+    }
     
     return data.data.map((manga: any) => {
       const coverArt = manga.relationships?.find((rel: any) => rel.type === 'cover_art');
       const coverFileName = coverArt?.attributes?.fileName;
+      // Use larger image size for better quality
       const coverImage = coverFileName 
-        ? `https://uploads.mangadex.org/covers/${manga.id}/${coverFileName}.256.jpg`
+        ? `https://uploads.mangadex.org/covers/${manga.id}/${coverFileName}.512.jpg`
         : undefined;
+
+      // Get title - try multiple languages
+      const title = manga.attributes.title.en || 
+                    manga.attributes.title.ja || 
+                    manga.attributes.title.ko ||
+                    manga.attributes.title['zh-hans'] ||
+                    manga.attributes.title['zh-hant'] ||
+                    Object.values(manga.attributes.title)[0] || 
+                    'Unknown Title';
 
       return {
         id: manga.id,
-        title: manga.attributes.title.en || 
-               manga.attributes.title.ja || 
-               Object.values(manga.attributes.title)[0] || 
-               'Unknown Title',
+        title,
         coverImage,
         description: manga.attributes.description?.en || 
                      manga.attributes.description?.ja || 

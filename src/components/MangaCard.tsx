@@ -69,16 +69,37 @@ export default function MangaCard({ manga, onRemove, onEdit }: MangaCardProps) {
       console.log(`Searching MangaDex for cover image: "${manga.title}"`);
       
       // Search MangaDex for the manga by title
-      searchManga(manga.title)
-        .then((results) => {
-          // Find the best match (exact title match or first result)
-          let bestMatch = results.find(r => 
+      // Try exact title first, then try without special characters
+      const cleanTitle = manga.title.replace(/[^\w\s]/g, '').trim();
+      const searchQueries = [manga.title, cleanTitle];
+      
+      const searchPromises = searchQueries.map(q => searchManga(q));
+      
+      Promise.all(searchPromises)
+        .then(([results1, results2]) => {
+          const allResults = [...results1, ...results2];
+          // Remove duplicates by ID
+          const uniqueResults = Array.from(
+            new Map(allResults.map(r => [r.id, r])).values()
+          );
+          
+          // Find the best match - try exact match first, then partial match
+          let bestMatch = uniqueResults.find(r => 
             r.title.toLowerCase().trim() === manga.title.toLowerCase().trim()
           );
           
-          // If no exact match, use the first result
-          if (!bestMatch && results.length > 0) {
-            bestMatch = results[0];
+          if (!bestMatch) {
+            // Try partial match (contains the title or title contains result)
+            bestMatch = uniqueResults.find(r => {
+              const rTitle = r.title.toLowerCase().trim();
+              const mTitle = manga.title.toLowerCase().trim();
+              return rTitle.includes(mTitle) || mTitle.includes(rTitle);
+            });
+          }
+          
+          // If still no match, use first result
+          if (!bestMatch && uniqueResults.length > 0) {
+            bestMatch = uniqueResults[0];
           }
           
           if (bestMatch && bestMatch.coverImage) {
