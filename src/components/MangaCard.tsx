@@ -208,6 +208,7 @@ export default function MangaCard({ manga, onRemove, onEdit }: MangaCardProps) {
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-md transition-shadow">
       <div className="flex gap-4">
+        {/* Show image if we have an imageUrl */}
         {imageUrl ? (
           <img
             src={imageUrl}
@@ -215,7 +216,7 @@ export default function MangaCard({ manga, onRemove, onEdit }: MangaCardProps) {
             className="w-24 h-32 object-cover rounded flex-shrink-0"
             crossOrigin="anonymous"
             onError={(e) => {
-              // If image fails to load, hide it and show placeholder
+              // If image fails to load, hide it
               const target = e.target as HTMLImageElement;
               console.error('❌ Image failed to load:', {
                 title: manga.title,
@@ -232,11 +233,8 @@ export default function MangaCard({ manga, onRemove, onEdit }: MangaCardProps) {
                 return;
               }
               
+              // Hide the image on error
               target.style.display = 'none';
-              const placeholder = target.nextElementSibling as HTMLElement;
-              if (placeholder) {
-                placeholder.style.display = 'flex';
-              }
             }}
             onLoad={() => {
               console.log('✅ Image loaded successfully:', {
@@ -248,22 +246,22 @@ export default function MangaCard({ manga, onRemove, onEdit }: MangaCardProps) {
             loading="lazy"
           />
         ) : isFetching ? (
+          // Show loading spinner only when fetching and no imageUrl
           <div className="w-24 h-32 bg-gray-200 rounded flex items-center justify-center flex-shrink-0">
             <div className="text-center">
               <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-600 mx-auto mb-1"></div>
               <p className="text-xs text-gray-500">Loading...</p>
             </div>
           </div>
-        ) : null}
-        <div 
-          className="w-24 h-32 bg-gray-200 rounded flex items-center justify-center flex-shrink-0"
-          style={{ display: imageUrl ? 'none' : 'flex' }}
-        >
-          <div className="text-center">
-            <BookOpen className="w-8 h-8 text-gray-400 mx-auto mb-1" />
-            <p className="text-xs text-gray-500">No image</p>
+        ) : (
+          // Show placeholder only when no imageUrl and not fetching
+          <div className="w-24 h-32 bg-gray-200 rounded flex items-center justify-center flex-shrink-0">
+            <div className="text-center">
+              <BookOpen className="w-8 h-8 text-gray-400 mx-auto mb-1" />
+              <p className="text-xs text-gray-500">No image</p>
+            </div>
           </div>
-        </div>
+        )}
 
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-4 mb-2">
