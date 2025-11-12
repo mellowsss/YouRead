@@ -69,53 +69,96 @@ export default function MangaCard({ manga, onRemove, onEdit }: MangaCardProps) {
       console.log(`Searching MangaDex for cover image: "${manga.title}"`);
       
       // Search MangaDex for the manga by title
-      // Try exact title first, then try without special characters
-      const cleanTitle = manga.title.replace(/[^\w\s]/g, '').trim();
-      const searchQueries = [manga.title, cleanTitle];
+      // Clean the title for better matching
+      const cleanTitle = manga.title
+        .replace(/[^\w\s]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
       
+      // Try multiple search strategies
+      const searchQueries = [
+        manga.title,           // Original title
+        cleanTitle,             // Cleaned title
+        manga.title.split(' ').slice(0, 3).join(' '), // First 3 words
+        cleanTitle.split(' ').slice(0, 3).join(' '),  // First 3 words cleaned
+      ].filter((q, i, arr) => q && arr.indexOf(q) === i); // Remove duplicates
+      
+      console.log(`Searching MangaDex for "${manga.title}" with queries:`, searchQueries);
+      
+      // Search with all queries and combine results
       const searchPromises = searchQueries.map(q => searchManga(q));
       
       Promise.all(searchPromises)
-        .then(([results1, results2]) => {
-          const allResults = [...results1, ...results2];
+        .then((resultsArrays) => {
+          const allResults = resultsArrays.flat();
           // Remove duplicates by ID
           const uniqueResults = Array.from(
             new Map(allResults.map(r => [r.id, r])).values()
           );
           
-          // Find the best match - try exact match first, then check altTitles, then partial match
-          const mTitle = manga.title.toLowerCase().trim();
+          console.log(`Found ${uniqueResults.length} unique results for "${manga.title}"`);
           
-          let bestMatch = uniqueResults.find(r => {
+          // Find the best match with scoring
+          const mTitle = manga.title.toLowerCase().trim();
+          const mTitleWords = mTitle.split(/\s+/).filter(w => w.length > 2); // Words longer than 2 chars
+          
+          // Score each result
+          const scoredResults = uniqueResults.map(r => {
+            let score = 0;
             const rTitle = r.title.toLowerCase().trim();
-            if (rTitle === mTitle) return true;
-            // Check altTitles if available
-            if (r.altTitles) {
-              return r.altTitles.some(alt => alt.toLowerCase().trim() === mTitle);
+            
+            // Exact match = highest score
+            if (rTitle === mTitle) {
+              score += 1000;
             }
-            return false;
+            
+            // Check altTitles for exact match
+            if (r.altTitles) {
+              const exactAltMatch = r.altTitles.some(alt => 
+                alt.toLowerCase().trim() === mTitle
+              );
+              if (exactAltMatch) score += 900;
+            }
+            
+            // Word-by-word matching
+            const rTitleWords = rTitle.split(/\s+/).filter(w => w.length > 2);
+            const matchingWords = mTitleWords.filter(mw => 
+              rTitleWords.some(rw => rw === mw || rw.includes(mw) || mw.includes(rw))
+            );
+            score += matchingWords.length * 10;
+            
+            // Percentage of words matched
+            if (mTitleWords.length > 0) {
+              const wordMatchRatio = matchingWords.length / mTitleWords.length;
+              score += wordMatchRatio * 100;
+            }
+            
+            // Title contains or is contained
+            if (rTitle.includes(mTitle)) score += 50;
+            if (mTitle.includes(rTitle)) score += 50;
+            
+            // Check altTitles for partial matches
+            if (r.altTitles) {
+              r.altTitles.forEach(alt => {
+                const altLower = alt.toLowerCase().trim();
+                if (altLower.includes(mTitle) || mTitle.includes(altLower)) {
+                  score += 30;
+                }
+              });
+            }
+            
+            return { result: r, score };
           });
           
-          if (!bestMatch) {
-            // Try partial match (contains the title or title contains result)
-            bestMatch = uniqueResults.find(r => {
-              const rTitle = r.title.toLowerCase().trim();
-              if (rTitle.includes(mTitle) || mTitle.includes(rTitle)) return true;
-              // Check altTitles for partial matches
-              if (r.altTitles) {
-                return r.altTitles.some(alt => {
-                  const altLower = alt.toLowerCase().trim();
-                  return altLower.includes(mTitle) || mTitle.includes(altLower);
-                });
-              }
-              return false;
-            });
-          }
+          // Sort by score and get the best match
+          scoredResults.sort((a, b) => b.score - a.score);
+          const bestMatch = scoredResults[0]?.score > 0 ? scoredResults[0].result : null;
           
-          // If still no match, use first result
-          if (!bestMatch && uniqueResults.length > 0) {
-            bestMatch = uniqueResults[0];
-          }
+          console.log(`Best match for "${manga.title}":`, {
+            title: bestMatch?.title,
+            score: scoredResults[0]?.score,
+            coverImage: bestMatch?.coverImage
+          });
           
           if (bestMatch && bestMatch.coverImage) {
             console.log(`✅ Found cover image for "${manga.title}" from MangaDex:`, bestMatch.coverImage);
@@ -126,7 +169,7 @@ export default function MangaCard({ manga, onRemove, onEdit }: MangaCardProps) {
               updateTrackedManga(manga.id, { coverImage: bestMatch.coverImage });
             });
           } else {
-            console.log(`❌ No cover image found for "${manga.title}" in MangaDex`);
+            console.log(`❌ No good match found for "${manga.title}" in MangaDex. Top result:`, scoredResults[0]?.result?.title);
           }
           setIsFetching(false);
         })
