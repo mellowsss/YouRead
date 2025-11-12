@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Generate YouRead Logo</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      max-width: 800px;
+      margin: 0 auto;
+      background: #f5f5f5;
+    }
+    .container {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    canvas {
+      border: 2px solid #ddd;
+      margin: 10px;
+      border-radius: 4px;
+      background: white;
+    }
+    button {
+      padding: 12px 24px;
+      margin: 10px;
+      font-size: 16px;
+      background: #0ea5e9;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    button:hover {
+      background: #0284c7;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>YouRead Logo Generator</h1>
+    <p>Click "Generate" and right-click to save as PNG</p>
+    <button onclick="generateLogo()">Generate Logo</button>
+    
+    <div>
+      <h3>Favicon (32x32)</h3>
+      <canvas id="favicon" width="32" height="32"></canvas>
+      
+      <h3>Logo (256x256)</h3>
+      <canvas id="logo" width="256" height="256"></canvas>
+    </div>
+  </div>
+
+  <script>
+    function drawLogo(ctx, size) {
+      ctx.clearRect(0, 0, size, size);
+      
+      const teal = '#5eead4';
+      const coral = '#ff6b6b';
+      const white = '#ffffff';
+      
+      const padding = size * 0.1;
+      const cornerRadius = size * 0.2;
+      const centerX = size / 2;
+      const centerY = size / 2;
+      const width = size - (padding * 2);
+      const height = size - (padding * 2);
+      const left = padding;
+      const top = padding;
+      
+      // Draw rounded square - left half teal
+      ctx.beginPath();
+      ctx.roundRect(left, top, width, height, cornerRadius);
+      ctx.fillStyle = teal;
+      ctx.fill();
+      
+      // Right half coral
+      ctx.beginPath();
+      ctx.roundRect(centerX, top, width / 2, height, cornerRadius);
+      ctx.fillStyle = coral;
+      ctx.fill();
+      
+      // White border
+      ctx.strokeStyle = white;
+      ctx.lineWidth = Math.max(1, size / 32);
+      ctx.beginPath();
+      ctx.roundRect(left, top, width, height, cornerRadius);
+      ctx.stroke();
+      
+      // Dashed center line
+      ctx.strokeStyle = white;
+      ctx.lineWidth = Math.max(0.5, size / 64);
+      ctx.setLineDash([size / 16, size / 32]);
+      ctx.beginPath();
+      ctx.moveTo(centerX, top);
+      ctx.lineTo(centerX, top + height);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      
+      // Draw white "M"
+      const mSize = size * 0.4;
+      const mX = centerX;
+      const mY = centerY;
+      const mWidth = mSize * 0.8;
+      const mHeight = mSize;
+      const strokeWidth = Math.max(2, size / 16);
+      
+      ctx.lineWidth = strokeWidth;
+      ctx.strokeStyle = white;
+      ctx.fillStyle = white;
+      
+      ctx.beginPath();
+      ctx.moveTo(mX - mWidth/2, mY + mHeight/2);
+      ctx.lineTo(mX - mWidth/2, mY - mHeight/2);
+      ctx.lineTo(mX, mY);
+      ctx.lineTo(mX + mWidth/2, mY - mHeight/2);
+      ctx.lineTo(mX + mWidth/2, mY + mHeight/2);
+      ctx.closePath();
+      ctx.fill();
+    }
+    
+    function generateLogo() {
+      [32, 256].forEach(size => {
+        const canvas = document.getElementById(size === 32 ? 'favicon' : 'logo');
+        const ctx = canvas.getContext('2d');
+        drawLogo(ctx, size);
+      });
+      alert('Logo generated! Right-click to save.');
+    }
+    
+    window.onload = generateLogo;
+  </script>
+</body>
+</html>
+

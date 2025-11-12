@@ -158,7 +158,13 @@ function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
-              <BookOpen className="w-8 h-8 text-primary-600" />
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center relative overflow-hidden shadow-md" style={{
+                background: 'linear-gradient(to right, #5eead4 0%, #5eead4 50%, #ff6b6b 50%, #ff6b6b 100%)',
+                border: '2px solid white'
+              }}>
+                <div className="absolute left-1/2 top-0 bottom-0 w-px border-l border-dashed border-white opacity-50"></div>
+                <span className="relative text-white font-bold text-xl z-10 drop-shadow-sm">M</span>
+              </div>
               <h1 className="text-3xl font-bold text-gray-900">YouRead</h1>
             </div>
             <div className="flex items-center gap-2">
