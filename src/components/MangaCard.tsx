@@ -1,6 +1,7 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { BookOpen, Calendar, Trash2, Edit3, ExternalLink } from 'lucide-react';
 import { TrackedManga } from '../types';
+import { getManganatoDetails } from '../services/manganatoApi';
 
 interface MangaCardProps {
   manga: TrackedManga;
@@ -57,20 +58,42 @@ export default function MangaCard({ manga, onRemove, onEdit }: MangaCardProps) {
     ? Math.round((manga.lastReadChapter / manga.totalChapters) * 100)
     : 0;
 
-  const imageUrl = manga.coverImage ? getProxiedImageUrl(manga.coverImage) : null;
-  
-  // Debug logging
+  const [fetchedCoverImage, setFetchedCoverImage] = useState<string | undefined>(undefined);
+  const [isFetching, setIsFetching] = useState(false);
+
+  // Fetch cover image from MangaNato if missing
   useEffect(() => {
-    if (manga.coverImage) {
-      console.log('MangaCard: Image data for', manga.title, {
-        original: manga.coverImage,
-        proxied: imageUrl,
-        hasProxied: !!imageUrl
-      });
-    } else {
-      console.log('MangaCard: No cover image for', manga.title);
+    // Only fetch if we don't have a cover image and we have a MangaNato URL
+    if (!manga.coverImage && !fetchedCoverImage && !isFetching && manga.manganatoUrl) {
+      setIsFetching(true);
+      console.log(`Fetching cover image for "${manga.title}" from:`, manga.manganatoUrl);
+      
+      getManganatoDetails(manga.manganatoUrl)
+        .then((details) => {
+          if (details && details.coverImage) {
+            console.log(`✅ Fetched cover image for "${manga.title}":`, details.coverImage);
+            setFetchedCoverImage(details.coverImage);
+            
+            // Also update the stored manga with the cover image
+            // Import updateTrackedManga from storage
+            import('../services/storage').then(({ updateTrackedManga }) => {
+              updateTrackedManga(manga.id, { coverImage: details.coverImage });
+            });
+          } else {
+            console.log(`❌ No cover image found for "${manga.title}"`);
+          }
+          setIsFetching(false);
+        })
+        .catch((error) => {
+          console.error(`Error fetching cover image for "${manga.title}":`, error);
+          setIsFetching(false);
+        });
     }
-  }, [manga.title, manga.coverImage, imageUrl]);
+  }, [manga.coverImage, manga.manganatoUrl, manga.id, manga.title, fetchedCoverImage, isFetching]);
+
+  // Use fetched image if available, otherwise use stored image
+  const coverImageToUse = manga.coverImage || fetchedCoverImage;
+  const imageUrl = coverImageToUse ? getProxiedImageUrl(coverImageToUse) : null;
 
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-md transition-shadow">
@@ -85,21 +108,10 @@ export default function MangaCard({ manga, onRemove, onEdit }: MangaCardProps) {
               const target = e.target as HTMLImageElement;
               console.error('❌ Image failed to load:', {
                 title: manga.title,
-                original: manga.coverImage,
+                original: coverImageToUse,
                 proxied: imageUrl,
-                actualSrc: target.src,
-                status: target.naturalWidth === 0 ? 'failed' : 'unknown',
-                error: e
+                actualSrc: target.src
               });
-              
-              // Try to fetch the image directly to see what error we get
-              fetch(imageUrl)
-                .then(res => {
-                  console.log('Direct fetch response:', res.status, res.statusText, res.headers.get('content-type'));
-                  return res.text();
-                })
-                .then(text => console.log('Response preview:', text.substring(0, 200)))
-                .catch(err => console.error('Direct fetch error:', err));
               
               target.style.display = 'none';
               const placeholder = target.nextElementSibling as HTMLElement;
@@ -110,12 +122,18 @@ export default function MangaCard({ manga, onRemove, onEdit }: MangaCardProps) {
             onLoad={() => {
               console.log('✅ Image loaded successfully:', {
                 title: manga.title,
-                original: manga.coverImage,
-                proxied: imageUrl
+                source: fetchedCoverImage ? 'fetched' : 'stored'
               });
             }}
             loading="lazy"
           />
+        ) : isFetching ? (
+          <div className="w-24 h-32 bg-gray-200 rounded flex items-center justify-center flex-shrink-0">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-600 mx-auto mb-1"></div>
+              <p className="text-xs text-gray-500">Loading...</p>
+            </div>
+          </div>
         ) : null}
         <div 
           className="w-24 h-32 bg-gray-200 rounded flex items-center justify-center flex-shrink-0"

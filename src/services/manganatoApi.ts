@@ -139,13 +139,41 @@ export async function getManganatoDetails(url: string): Promise<Manga | null> {
     const titleElement = doc.querySelector('h1, .story-info-right h1, .story-info-right h2, [class*="story-title"]');
     const title = titleElement?.textContent?.trim() || '';
     
-    // Extract cover image
-    const coverElement = doc.querySelector('.story-info-left img, .info-image img, [class*="cover"] img');
-    const coverImage = coverElement?.getAttribute('src') || coverElement?.getAttribute('data-src') || undefined;
+    // Extract cover image - try multiple selectors
+    let coverElement = doc.querySelector('.story-info-left img, .info-image img, [class*="cover"] img');
+    
+    // If not found, try more selectors
+    if (!coverElement) {
+      coverElement = doc.querySelector('img[src*="cover"], img[src*="thumb"], img[src*="manga"], .item-img img, .story-img img');
+    }
+    
+    // Try multiple attributes
+    let coverImage = coverElement?.getAttribute('src') || 
+                     coverElement?.getAttribute('data-src') || 
+                     coverElement?.getAttribute('data-original') ||
+                     coverElement?.getAttribute('data-lazy-src') ||
+                     undefined;
+    
+    // If still no image, try background-image from style
+    if (!coverImage && coverElement) {
+      const style = coverElement.getAttribute('style') || window.getComputedStyle(coverElement as Element).backgroundImage;
+      if (style && style.includes('url(')) {
+        const match = style.match(/url\(['"]?([^'"]+)['"]?\)/);
+        if (match && match[1]) {
+          coverImage = match[1];
+        }
+      }
+    }
+    
+    // Make absolute URL if relative
     const fullCoverImage = coverImage?.startsWith('http') 
       ? coverImage 
       : coverImage 
-        ? `${MANGANATO_BASE}${coverImage}` 
+        ? (coverImage.startsWith('//') 
+          ? `https:${coverImage}`
+          : coverImage.startsWith('/')
+          ? `${MANGANATO_BASE}${coverImage}`
+          : `${MANGANATO_BASE}/${coverImage}`)
         : undefined;
     
     // Extract description
