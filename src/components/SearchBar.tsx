@@ -107,7 +107,7 @@ export default function SearchBar({ onSelectManga }: SearchBarProps) {
       setResults([]);
       setShowResults(false);
     }
-  }, [query]);
+  }, [query, source]);
   
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setQuery(e.target.value);

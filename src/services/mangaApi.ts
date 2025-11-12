@@ -59,6 +59,84 @@ export async function searchManga(query: string): Promise<MangaSearchResult[]> {
   }
 }
 
+// Search manga by tag/genre
+export async function searchMangaByTag(tagName: string): Promise<MangaSearchResult[]> {
+  try {
+    // First, get all tags and find matching one
+    const tagResponse = await fetch(`${MANGADEX_API}/manga/tag`);
+    const tagData = await tagResponse.json();
+    
+    if (!tagData.data || !Array.isArray(tagData.data)) {
+      console.log(`No tags found in MangaDex`);
+      return [];
+    }
+    
+    // Find matching tag by name (case-insensitive)
+    const tagNameLower = tagName.toLowerCase();
+    const matchingTag = tagData.data.find((tag: any) => {
+      const tagNames = [
+        tag.attributes.name.en,
+        tag.attributes.name.ja,
+        tag.attributes.name.ko,
+        ...Object.values(tag.attributes.name || {})
+      ].filter(Boolean).map((n: string) => n.toLowerCase());
+      return tagNames.some(n => n.includes(tagNameLower) || tagNameLower.includes(n));
+    });
+    
+    if (!matchingTag) {
+      console.log(`No tag found matching: ${tagName}`);
+      return [];
+    }
+    
+    const tagId = matchingTag.id;
+    
+    // Search manga with this tag
+    const response = await fetch(
+      `${MANGADEX_API}/manga?includedTags[]=${tagId}&limit=20&includes[]=cover_art&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica&order[rating]=desc`
+    );
+    const data = await response.json();
+    
+    if (!data.data || !Array.isArray(data.data)) {
+      return [];
+    }
+    
+    return data.data.map((manga: any) => {
+      const coverArt = manga.relationships?.find((rel: any) => rel.type === 'cover_art');
+      const coverFileName = coverArt?.attributes?.fileName;
+      const coverImage = coverFileName 
+        ? `https://uploads.mangadex.org/covers/${manga.id}/${coverFileName}.512.jpg`
+        : undefined;
+
+      const title = manga.attributes.title.en || 
+                    manga.attributes.title.ja || 
+                    manga.attributes.title.ko ||
+                    manga.attributes.title['zh-hans'] ||
+                    manga.attributes.title['zh-hant'] ||
+                    Object.values(manga.attributes.title)[0] || 
+                    'Unknown Title';
+
+      const altTitles = manga.attributes.altTitles || [];
+      const allTitles = [title, ...altTitles.map((alt: any) => 
+        alt.en || alt.ja || alt.ko || Object.values(alt)[0]
+      ).filter(Boolean)];
+
+      return {
+        id: manga.id,
+        title,
+        coverImage,
+        description: manga.attributes.description?.en || 
+                     manga.attributes.description?.ja || 
+                     Object.values(manga.attributes.description || {})[0] || 
+                     undefined,
+        altTitles: allTitles,
+      };
+    });
+  } catch (error) {
+    console.error(`Error searching manga by tag ${tagName}:`, error);
+    return [];
+  }
+}
+
 export async function getMangaDetails(id: string): Promise<Manga | null> {
   try {
     const response = await fetch(

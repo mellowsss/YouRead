@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Sparkles, Loader2 } from 'lucide-react';
 import { TrackedManga, MangaSearchResult } from '../types';
-import { searchManga } from '../services/mangaApi';
+import { searchManga, searchMangaByTag, getMangaDetails } from '../services/mangaApi';
 
 interface RecommendationsProps {
   trackedManga: TrackedManga[];
@@ -39,31 +39,44 @@ export default function Recommendations({ trackedManga, onSelectManga }: Recomme
       });
 
       // Get recommendations - try multiple approaches
-      const allResults: any[] = [];
+      const allResults: MangaSearchResult[] = [];
       const trackedIds = new Set(trackedManga.map(m => m.id));
       
-      // Approach 1: Search by popular genres from read manga
+      // Approach 1: Search by tags/genres from read manga using MangaDex tag search
       if (allGenres.size > 0) {
-        const genreArray = Array.from(allGenres).slice(0, 3);
+        const genreArray = Array.from(allGenres).slice(0, 5);
         for (const genre of genreArray) {
           try {
-            const results = await searchManga(genre);
-            allResults.push(...results.filter(r => !trackedIds.has(r.id)));
+            console.log(`Searching for recommendations by tag: ${genre}`);
+            const results = await searchMangaByTag(genre);
+            const filtered = results.filter(r => !trackedIds.has(r.id));
+            allResults.push(...filtered);
+            console.log(`Found ${filtered.length} recommendations for tag "${genre}"`);
           } catch (err) {
-            console.error(`Error searching for genre ${genre}:`, err);
+            console.error(`Error searching for tag ${genre}:`, err);
+            // Fallback to title search if tag search fails
+            try {
+              const results = await searchManga(genre);
+              allResults.push(...results.filter(r => !trackedIds.has(r.id)));
+            } catch (fallbackErr) {
+              console.error(`Fallback search also failed for ${genre}:`, fallbackErr);
+            }
           }
         }
       }
       
-      // Approach 2: Search by popular keywords
-      const popularQueries = ['action', 'fantasy', 'romance', 'comedy', 'drama', 'adventure', 'supernatural'];
-      for (let i = 0; i < 3 && allResults.length < 20; i++) {
-        const randomQuery = popularQueries[Math.floor(Math.random() * popularQueries.length)];
-        try {
-          const results = await searchManga(randomQuery);
-          allResults.push(...results.filter(r => !trackedIds.has(r.id)));
-        } catch (err) {
-          console.error(`Error searching for ${randomQuery}:`, err);
+      // Approach 2: If we don't have enough results, search by popular keywords
+      if (allResults.length < 15) {
+        const popularQueries = ['action', 'fantasy', 'romance', 'comedy', 'drama', 'adventure', 'supernatural'];
+        const needed = 15 - allResults.length;
+        for (let i = 0; i < Math.min(needed, 5); i++) {
+          const randomQuery = popularQueries[Math.floor(Math.random() * popularQueries.length)];
+          try {
+            const results = await searchManga(randomQuery);
+            allResults.push(...results.filter(r => !trackedIds.has(r.id)));
+          } catch (err) {
+            console.error(`Error searching for ${randomQuery}:`, err);
+          }
         }
       }
       

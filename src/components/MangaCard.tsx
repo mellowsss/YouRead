@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { BookOpen, Calendar, Trash2, Edit3, ExternalLink } from 'lucide-react';
-import { TrackedManga } from '../types';
+import { TrackedManga, MangaSearchResult } from '../types';
 import { searchManga } from '../services/mangaApi';
 
 interface MangaCardProps {
@@ -75,28 +75,39 @@ export default function MangaCard({ manga, onRemove, onEdit }: MangaCardProps) {
         .replace(/\s+/g, ' ')
         .trim();
       
-      // Try multiple search strategies
-      const searchQueries = [
-        manga.title,           // Original title
-        cleanTitle,             // Cleaned title
-        manga.title.split(' ').slice(0, 3).join(' '), // First 3 words
-        cleanTitle.split(' ').slice(0, 3).join(' '),  // First 3 words cleaned
-      ].filter((q, i, arr) => q && arr.indexOf(q) === i); // Remove duplicates
+      // Try multiple search strategies - be more specific
+      // Remove common words that might cause false matches
+      const commonWords = ['the', 'a', 'an', 'of', 'in', 'on', 'at', 'to', 'for', 'with', 'from'];
+      const titleWords = cleanTitle.split(' ').filter(w => w.length > 2 && !commonWords.includes(w.toLowerCase()));
       
-      console.log(`Searching MangaDex for "${manga.title}" with queries:`, searchQueries);
+      const searchQueries = [
+        manga.title,           // Original title (most specific)
+        cleanTitle,             // Cleaned title
+        titleWords.slice(0, 4).join(' '), // First 4 meaningful words
+        titleWords.slice(0, 3).join(' '), // First 3 meaningful words
+        titleWords.slice(0, 2).join(' '), // First 2 meaningful words
+      ].filter((q, i, arr) => q && q.trim().length >= 2 && arr.indexOf(q) === i); // Remove duplicates and too short queries
+      
+      console.log(`[${manga.id}] Searching MangaDex for "${manga.title}" with queries:`, searchQueries);
       
       // Search with all queries and combine results
-      const searchPromises = searchQueries.map(q => searchManga(q));
+      // Use Promise.allSettled to handle individual failures
+      const searchPromises = searchQueries.map(q => searchManga(q).catch(err => {
+        console.error(`[${manga.id}] Search failed for query "${q}":`, err);
+        return [];
+      }));
       
-      Promise.all(searchPromises)
-        .then((resultsArrays) => {
-          const allResults = resultsArrays.flat();
-          // Remove duplicates by ID
-          const uniqueResults = Array.from(
-            new Map(allResults.map(r => [r.id, r])).values()
-          );
-          
-          console.log(`Found ${uniqueResults.length} unique results for "${manga.title}"`);
+      Promise.allSettled(searchPromises).then((results) => {
+        const allResults = results
+          .filter((r): r is PromiseFulfilledResult<MangaSearchResult[]> => r.status === 'fulfilled')
+          .flatMap(r => r.value);
+        
+        // Remove duplicates by ID
+        const uniqueResults = Array.from(
+          new Map(allResults.map(r => [r.id, r])).values()
+        );
+        
+        console.log(`[${manga.id}] Found ${uniqueResults.length} unique results for "${manga.title}"`);
           
           // Find the best match with scoring
           const mTitle = manga.title.toLowerCase().trim();
@@ -153,21 +164,24 @@ export default function MangaCard({ manga, onRemove, onEdit }: MangaCardProps) {
           // Sort by score and get the best match
           scoredResults.sort((a, b) => b.score - a.score);
           
-          // Only use match if score is reasonable (at least 20 points)
-          const bestMatch = scoredResults[0]?.score >= 20 ? scoredResults[0].result : null;
+          // Only use match if score is reasonable (at least 50 points for better accuracy)
+          // Increased threshold to avoid false matches
+          const bestMatch = scoredResults[0]?.score >= 50 ? scoredResults[0].result : null;
           
           // Log top 3 matches for debugging
-          console.log(`Top matches for "${manga.title}":`, scoredResults.slice(0, 3).map(s => ({
+          console.log(`[${manga.id}] Top matches for "${manga.title}":`, scoredResults.slice(0, 3).map(s => ({
             title: s.result.title,
             score: s.score,
-            coverImage: s.result.coverImage?.substring(0, 50) + '...'
+            coverImage: s.result.coverImage?.substring(0, 50) + '...',
+            id: s.result.id
           })));
           
           if (bestMatch && bestMatch.coverImage) {
-            console.log(`✅ Found cover image for "${manga.title}":`, {
+            console.log(`✅ [${manga.id}] Found cover image for "${manga.title}":`, {
               matchedTitle: bestMatch.title,
+              matchedId: bestMatch.id,
               score: scoredResults[0].score,
-              coverImage: bestMatch.coverImage
+              coverImage: bestMatch.coverImage.substring(0, 80) + '...'
             });
             setFetchedCoverImage(bestMatch.coverImage);
             
@@ -176,7 +190,7 @@ export default function MangaCard({ manga, onRemove, onEdit }: MangaCardProps) {
               updateTrackedManga(manga.id, { coverImage: bestMatch.coverImage });
             });
           } else {
-            console.log(`❌ No good match found for "${manga.title}". Top result score:`, scoredResults[0]?.score, 'Title:', scoredResults[0]?.result?.title);
+            console.log(`❌ [${manga.id}] No good match found for "${manga.title}". Top result score:`, scoredResults[0]?.score, 'Title:', scoredResults[0]?.result?.title, 'ID:', scoredResults[0]?.result?.id);
           }
           setIsFetching(false);
         })
