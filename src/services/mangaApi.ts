@@ -1,14 +1,27 @@
 import { Manga, MangaSearchResult } from '../types';
 
-// Using MangaDex API as it's free and doesn't require authentication
-const MANGADEX_API = 'https://api.mangadex.org';
+// Use our proxy to avoid CORS issues and handle errors better
+const MANGADEX_API = '/api/mangadex-proxy';
+const MANGADEX_API_DIRECT = 'https://api.mangadex.org'; // Fallback if proxy fails
 
 export async function searchManga(query: string): Promise<MangaSearchResult[]> {
   try {
     // Use MangaDex search endpoint which searches both title and altTitles
-    const response = await fetch(
-      `${MANGADEX_API}/manga?title=${encodeURIComponent(query)}&limit=20&includes[]=cover_art&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica&order[relevance]=desc`
-    );
+    // Try proxy first, fallback to direct API
+    const proxyUrl = `${MANGADEX_API}?path=manga&title=${encodeURIComponent(query)}&limit=20&includes[]=cover_art&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica&order[relevance]=desc`;
+    
+    let response: Response;
+    try {
+      response = await fetch(proxyUrl);
+      if (!response.ok) throw new Error(`Proxy failed: ${response.status}`);
+    } catch (proxyError) {
+      console.warn('Proxy failed, trying direct API:', proxyError);
+      // Fallback to direct API
+      response = await fetch(
+        `${MANGADEX_API_DIRECT}/manga?title=${encodeURIComponent(query)}&limit=20&includes[]=cover_art&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica&order[relevance]=desc`
+      );
+    }
+    
     const data = await response.json();
     
     if (!data.data || !Array.isArray(data.data)) {
@@ -63,7 +76,15 @@ export async function searchManga(query: string): Promise<MangaSearchResult[]> {
 export async function searchMangaByTag(tagName: string): Promise<MangaSearchResult[]> {
   try {
     // First, get all tags and find matching one
-    const tagResponse = await fetch(`${MANGADEX_API}/manga/tag`);
+    let tagResponse: Response;
+    try {
+      tagResponse = await fetch(`${MANGADEX_API}?path=manga/tag`);
+      if (!tagResponse.ok) throw new Error(`Proxy failed: ${tagResponse.status}`);
+    } catch (proxyError) {
+      console.warn('Proxy failed, trying direct API:', proxyError);
+      tagResponse = await fetch(`${MANGADEX_API_DIRECT}/manga/tag`);
+    }
+    
     const tagData = await tagResponse.json();
     
     if (!tagData.data || !Array.isArray(tagData.data)) {
@@ -91,9 +112,19 @@ export async function searchMangaByTag(tagName: string): Promise<MangaSearchResu
     const tagId = matchingTag.id;
     
     // Search manga with this tag
-    const response = await fetch(
-      `${MANGADEX_API}/manga?includedTags[]=${tagId}&limit=20&includes[]=cover_art&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica&order[rating]=desc`
-    );
+    let response: Response;
+    try {
+      response = await fetch(
+        `${MANGADEX_API}?path=manga&includedTags[]=${tagId}&limit=20&includes[]=cover_art&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica&order[rating]=desc`
+      );
+      if (!response.ok) throw new Error(`Proxy failed: ${response.status}`);
+    } catch (proxyError) {
+      console.warn('Proxy failed, trying direct API:', proxyError);
+      response = await fetch(
+        `${MANGADEX_API_DIRECT}/manga?includedTags[]=${tagId}&limit=20&includes[]=cover_art&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica&order[rating]=desc`
+      );
+    }
+    
     const data = await response.json();
     
     if (!data.data || !Array.isArray(data.data)) {
@@ -139,9 +170,19 @@ export async function searchMangaByTag(tagName: string): Promise<MangaSearchResu
 
 export async function getMangaDetails(id: string): Promise<Manga | null> {
   try {
-    const response = await fetch(
-      `${MANGADEX_API}/manga/${id}?includes[]=cover_art&includes[]=author&includes[]=artist`
-    );
+    let response: Response;
+    try {
+      response = await fetch(
+        `${MANGADEX_API}?path=manga/${id}&includes[]=cover_art&includes[]=author&includes[]=artist`
+      );
+      if (!response.ok) throw new Error(`Proxy failed: ${response.status}`);
+    } catch (proxyError) {
+      console.warn('Proxy failed, trying direct API:', proxyError);
+      response = await fetch(
+        `${MANGADEX_API_DIRECT}/manga/${id}?includes[]=cover_art&includes[]=author&includes[]=artist`
+      );
+    }
+    
     const data = await response.json();
     
     if (!data.data) return null;
@@ -157,9 +198,19 @@ export async function getMangaDetails(id: string): Promise<Manga | null> {
     const artist = manga.relationships?.find((rel: any) => rel.type === 'artist');
 
     // Get chapter count
-    const chaptersResponse = await fetch(
-      `${MANGADEX_API}/manga/${id}/aggregate?translatedLanguage[]=en`
-    );
+    let chaptersResponse: Response;
+    try {
+      chaptersResponse = await fetch(
+        `${MANGADEX_API}?path=manga/${id}/aggregate&translatedLanguage[]=en`
+      );
+      if (!chaptersResponse.ok) throw new Error(`Proxy failed: ${chaptersResponse.status}`);
+    } catch (proxyError) {
+      console.warn('Proxy failed, trying direct API:', proxyError);
+      chaptersResponse = await fetch(
+        `${MANGADEX_API_DIRECT}/manga/${id}/aggregate?translatedLanguage[]=en`
+      );
+    }
+    
     const chaptersData = await chaptersResponse.json();
     const totalChapters = chaptersData.volumes 
       ? Object.values(chaptersData.volumes).reduce((acc: number, vol: any) => {
