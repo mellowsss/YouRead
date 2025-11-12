@@ -43,10 +43,14 @@ async function initPopup() {
     } else {
       statusDiv.innerHTML = '<div class="status info">Visit a MangaNato manga page to track it</div>';
       actionsDiv.innerHTML = `
-        <button class="button primary" onclick="window.open('${YOUREAD_URL}', '_blank')">
+        <button class="button primary" id="openYouReadBtn2">
           Open YouRead
         </button>
       `;
+      
+      document.getElementById('openYouReadBtn2').addEventListener('click', () => {
+        window.open(YOUREAD_URL, '_blank');
+      });
     }
   } catch (error) {
     console.error('Error initializing popup:', error);
@@ -80,7 +84,7 @@ async function showHistoryImport(tab, statusDiv, mangaInfoDiv, actionsDiv) {
         <button class="button secondary" id="importCurrentPage">
           Import This Page Only (${detectedHistory.length} manga)
         </button>
-        <button class="button secondary" onclick="window.open('${YOUREAD_URL}', '_blank')" style="margin-top: 8px;">
+        <button class="button secondary" id="openYouReadFromHistory" style="margin-top: 8px;">
           Open YouRead
         </button>
       `;
@@ -90,32 +94,67 @@ async function showHistoryImport(tab, statusDiv, mangaInfoDiv, actionsDiv) {
       });
       
       document.getElementById('importCurrentPage').addEventListener('click', async () => {
-        await chrome.storage.local.set({ pendingBulkImport: detectedHistory });
-        chrome.tabs.create({ 
-          url: `${YOUREAD_URL}?bulkImport=${encodeURIComponent(JSON.stringify(detectedHistory))}` 
+        await chrome.storage.local.set({ 
+          pendingBulkImport: detectedHistory,
+          bulkImportTimestamp: Date.now()
         });
+        
+        if (detectedHistory.length > 50) {
+          chrome.tabs.create({ 
+            url: `${YOUREAD_URL}?bulkImportFlag=true` 
+          });
+        } else {
+          chrome.tabs.create({ 
+            url: `${YOUREAD_URL}?bulkImport=${encodeURIComponent(JSON.stringify(detectedHistory))}` 
+          });
+        }
         window.close();
       });
+      
+      const openYouReadBtn = document.getElementById('openYouRead');
+      if (openYouReadBtn) {
+        openYouReadBtn.addEventListener('click', () => {
+          window.open(YOUREAD_URL, '_blank');
+        });
+      }
+      
+      const openYouReadFromHistoryBtn = document.getElementById('openYouReadFromHistory');
+      if (openYouReadFromHistoryBtn) {
+        openYouReadFromHistoryBtn.addEventListener('click', () => {
+          window.open(YOUREAD_URL, '_blank');
+        });
+      }
     } else {
       statusDiv.innerHTML = '<div class="status info">Scanning history page...</div>';
       mangaInfoDiv.innerHTML = '<div class="loading">Please wait...</div>';
       
       // Request content script to extract history directly
       try {
+        // Wait a bit for content script to be ready
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
         const response = await chrome.tabs.sendMessage(tab.id, { type: 'EXTRACT_HISTORY' });
         
         if (response && response.mangaList && response.mangaList.length > 0) {
           await chrome.storage.local.set({ detectedHistory: response.mangaList });
           showHistoryImport(tab, statusDiv, mangaInfoDiv, actionsDiv);
         } else {
-          statusDiv.innerHTML = '<div class="status error">No manga found on this page</div>';
-          mangaInfoDiv.innerHTML = '<p style="color: #6b7280; font-size: 12px;">Make sure you\'re logged in and on the MangaNato bookmark page: https://www.manganato.gg/bookmark</p>';
+          // Try one more time after waiting
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          const retryResponse = await chrome.tabs.sendMessage(tab.id, { type: 'EXTRACT_HISTORY' });
+          
+          if (retryResponse && retryResponse.mangaList && retryResponse.mangaList.length > 0) {
+            await chrome.storage.local.set({ detectedHistory: retryResponse.mangaList });
+            showHistoryImport(tab, statusDiv, mangaInfoDiv, actionsDiv);
+          } else {
+            statusDiv.innerHTML = '<div class="status error">No manga found on this page</div>';
+            mangaInfoDiv.innerHTML = '<p style="color: #6b7280; font-size: 12px;">Make sure you\'re logged in and on the MangaNato bookmark page: https://www.manganato.gg/bookmark</p>';
+          }
         }
       } catch (error) {
         console.error('Error extracting history:', error);
-        // Try to extract from page directly
-        statusDiv.innerHTML = '<div class="status info">Scanning page... Please refresh the page and try again.</div>';
-        mangaInfoDiv.innerHTML = '<p style="color: #6b7280; font-size: 12px;">If this persists, try refreshing the bookmark page and clicking the extension again.</p>';
+        statusDiv.innerHTML = '<div class="status error">Error: Could not read bookmark page</div>';
+        mangaInfoDiv.innerHTML = '<p style="color: #6b7280; font-size: 12px;">Please refresh the bookmark page and try again. Make sure you\'re logged into MangaNato.</p>';
       }
     }
   } catch (error) {
@@ -196,14 +235,26 @@ async function importHistoryToYouRead(mangaList, tab) {
     statusDiv.innerHTML = `<div class="status success">✓ Collected ${allManga.length} manga from all pages!</div>`;
     mangaInfoDiv.innerHTML = `<div class="manga-info"><h3>Ready to Import</h3><p>Found <strong>${allManga.length}</strong> total manga</p></div>`;
     
-    // Store all manga for website to pick up
+    // Store all manga for website to pick up (as backup)
     await chrome.storage.local.set({ pendingBulkImport: allManga });
     
-    // Open YouRead website with bulk import data
-    const importData = JSON.stringify(allManga);
-    chrome.tabs.create({ 
-      url: `${YOUREAD_URL}?bulkImport=${encodeURIComponent(importData)}` 
-    });
+    // For large imports, use localStorage instead of URL (URLs have length limits)
+    if (allManga.length > 50) {
+      // Store in extension storage and use a flag
+      await chrome.storage.local.set({ 
+        pendingBulkImport: allManga,
+        bulkImportTimestamp: Date.now()
+      });
+      chrome.tabs.create({ 
+        url: `${YOUREAD_URL}?bulkImportFlag=true` 
+      });
+    } else {
+      // For smaller imports, use URL parameter
+      const importData = JSON.stringify(allManga);
+      chrome.tabs.create({ 
+        url: `${YOUREAD_URL}?bulkImport=${encodeURIComponent(importData)}` 
+      });
+    }
     
     // Close popup after a short delay
     setTimeout(() => window.close(), 500);
@@ -235,7 +286,7 @@ function showMangaInfo(manga, mangaInfoDiv, actionsDiv) {
     <button class="button primary" id="addToYouRead">
       Add to YouRead
     </button>
-    <button class="button secondary" onclick="window.open('${YOUREAD_URL}', '_blank')">
+    <button class="button secondary" id="openYouReadFromImport">
       Open YouRead
     </button>
   `;
@@ -243,6 +294,13 @@ function showMangaInfo(manga, mangaInfoDiv, actionsDiv) {
   document.getElementById('addToYouRead').addEventListener('click', () => {
     addToYouRead(manga);
   });
+  
+  const openYouReadFromImportBtn = document.getElementById('openYouReadFromImport');
+  if (openYouReadFromImportBtn) {
+    openYouReadFromImportBtn.addEventListener('click', () => {
+      window.open(YOUREAD_URL, '_blank');
+    });
+  }
 }
 
 // Add manga to YouRead

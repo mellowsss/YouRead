@@ -18,6 +18,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendResponse({ success: false, error: error.message });
     });
     return true; // Keep channel open for async
+  } else if (message.type === 'GET_BULK_IMPORT') {
+    // Get bulk import data from storage
+    chrome.storage.local.get(['pendingBulkImport', 'bulkImportTimestamp'], (result) => {
+      if (result.pendingBulkImport) {
+        sendResponse({ mangaList: result.pendingBulkImport });
+        // Clean up after sending
+        chrome.storage.local.remove(['pendingBulkImport', 'bulkImportTimestamp']);
+      } else {
+        sendResponse({ mangaList: null });
+      }
+    });
+    return true; // Keep channel open for async
   }
   return true; // Keep the message channel open for async response
 });
@@ -47,12 +59,23 @@ async function importHistoryFromPage(tabId) {
       return { success: false, error: 'Not on MangaNato page' };
     }
     
+    // Ensure content script is injected
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId: tabId },
+        files: ['content.js']
+      });
+    } catch (injectError) {
+      // Content script might already be injected, ignore
+      console.log('Content script injection note:', injectError.message);
+    }
+    
     // Wait for page to be ready
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await new Promise(resolve => setTimeout(resolve, 1500));
     
     // Try to send message to content script with retries
     let lastError = null;
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 5; i++) {
       try {
         const results = await chrome.tabs.sendMessage(tabId, { type: 'EXTRACT_HISTORY' });
         if (results && results.mangaList !== undefined) {
@@ -61,7 +84,7 @@ async function importHistoryFromPage(tabId) {
       } catch (sendError) {
         lastError = sendError;
         // Wait before retry
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
     }
     
@@ -145,5 +168,58 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     // Clear badge when navigating away
     chrome.action.setBadgeText({ text: '' });
   }
+  
+  // If YouRead page loads with bulkImportFlag, inject script to send data
+  if (changeInfo.status === 'complete' && tab.url?.includes(YOUREAD_URL)) {
+    try {
+      const url = new URL(tab.url);
+      if (url.searchParams.get('bulkImportFlag') === 'true') {
+        // Wait a bit for page to be ready
+        setTimeout(() => {
+          // Inject script to send bulk import data to the page
+          chrome.scripting.executeScript({
+            target: { tabId: tabId },
+            func: sendBulkImportToPage
+          }).catch(err => {
+            console.error('Error injecting script:', err);
+            // Fallback: try again after more delay
+            setTimeout(() => {
+              chrome.scripting.executeScript({
+                target: { tabId: tabId },
+                func: sendBulkImportToPage
+              }).catch(err2 => console.error('Retry failed:', err2));
+            }, 2000);
+          });
+        }, 2000);
+      }
+    } catch (e) {
+      // URL parsing might fail, ignore
+    }
+  }
 });
+
+// Function to send bulk import data to the page (injected into YouRead page)
+function sendBulkImportToPage() {
+  // This function runs in the page context, so we need to use chrome.runtime.sendMessage
+  // to get data from extension storage
+  if (typeof chrome !== 'undefined' && chrome.runtime) {
+    chrome.runtime.sendMessage({ type: 'GET_BULK_IMPORT' }, (response) => {
+      if (chrome.runtime.lastError) {
+        console.error('Extension error:', chrome.runtime.lastError);
+        return;
+      }
+      if (response && response.mangaList) {
+        // Send to page via postMessage
+        window.postMessage({
+          type: 'BULK_IMPORT_DATA',
+          mangaList: response.mangaList
+        }, '*');
+      } else {
+        console.log('No bulk import data found');
+      }
+    });
+  } else {
+    console.error('Chrome extension API not available');
+  }
+}
 

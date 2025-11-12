@@ -65,58 +65,72 @@ function App() {
   const handleBulkImport = (mangaList: Partial<TrackedManga>[]) => {
     if (!Array.isArray(mangaList) || mangaList.length === 0) {
       console.error('Invalid manga list:', mangaList);
+      alert('No manga data to import.');
       return;
     }
     
+    console.log(`Starting bulk import of ${mangaList.length} manga...`);
     let added = 0;
     let updated = 0;
+    let skipped = 0;
     const currentManga = getTrackedManga();
     
     mangaList.forEach((manga) => {
-      if (!manga.id || !manga.title) {
-        console.warn('Skipping invalid manga:', manga);
-        return;
-      }
-      
-      const existing = currentManga.find(m => m.id === manga.id);
-      
-      if (!existing) {
-        const newManga: TrackedManga = {
-          id: manga.id,
-          title: manga.title,
-          coverImage: manga.coverImage,
-          manganatoUrl: manga.manganatoUrl,
-          lastReadChapter: manga.lastReadChapter,
-          totalChapters: manga.totalChapters || manga.chapters,
-          readingStatus: manga.lastReadChapter ? 'reading' : 'planning',
-          dateAdded: new Date().toISOString(),
-          lastUpdated: new Date().toISOString(),
-        };
-        addTrackedManga(newManga);
-        added++;
-      } else {
-        // Update existing with new chapter info
-        const updates: Partial<TrackedManga> = {
-          lastReadChapter: manga.lastReadChapter !== undefined 
-            ? Math.max(manga.lastReadChapter, existing.lastReadChapter || 0)
-            : existing.lastReadChapter,
-          totalChapters: manga.totalChapters || manga.chapters || existing.totalChapters,
-          lastUpdated: new Date().toISOString(),
-        };
-        if (manga.lastReadChapter && manga.lastReadChapter > (existing.lastReadChapter || 0)) {
-          updates.readingStatus = 'reading';
+      try {
+        if (!manga.id || !manga.title) {
+          console.warn('Skipping invalid manga:', manga);
+          skipped++;
+          return;
         }
-        updateTrackedManga(existing.id, updates);
-        updated++;
+        
+        const existing = currentManga.find(m => m.id === manga.id);
+        
+        if (!existing) {
+          const newManga: TrackedManga = {
+            id: manga.id,
+            title: manga.title,
+            coverImage: manga.coverImage,
+            manganatoUrl: manga.manganatoUrl,
+            lastReadChapter: manga.lastReadChapter,
+            totalChapters: manga.totalChapters || manga.chapters,
+            readingStatus: manga.lastReadChapter ? 'reading' : 'planning',
+            dateAdded: new Date().toISOString(),
+            lastUpdated: new Date().toISOString(),
+          };
+          addTrackedManga(newManga);
+          added++;
+        } else {
+          // Update existing with new chapter info
+          const updates: Partial<TrackedManga> = {
+            lastReadChapter: manga.lastReadChapter !== undefined 
+              ? Math.max(manga.lastReadChapter || 0, existing.lastReadChapter || 0)
+              : existing.lastReadChapter,
+            totalChapters: manga.totalChapters || manga.chapters || existing.totalChapters,
+            lastUpdated: new Date().toISOString(),
+          };
+          if (manga.lastReadChapter && manga.lastReadChapter > (existing.lastReadChapter || 0)) {
+            updates.readingStatus = 'reading';
+          }
+          updateTrackedManga(existing.id, updates);
+          updated++;
+        }
+      } catch (error) {
+        console.error('Error processing manga:', manga, error instanceof Error ? error.message : String(error));
+        skipped++;
       }
     });
     
     // Refresh the list
-    setTrackedManga(getTrackedManga());
+    const updatedList = getTrackedManga();
+    setTrackedManga(updatedList);
+    
+    console.log(`Import complete: ${added} added, ${updated} updated, ${skipped} skipped`);
     
     // Show success message
     if (added > 0 || updated > 0) {
-      alert(`Successfully imported ${added} new manga and updated ${updated} existing manga!`);
+      alert(`✅ Successfully imported ${added} new manga and updated ${updated} existing manga!`);
+    } else if (skipped > 0) {
+      alert(`⚠️ ${skipped} manga were skipped. They may already be in your library or have invalid data.`);
     } else {
       alert('No manga were imported. They may already be in your library.');
     }
@@ -129,9 +143,43 @@ function App() {
     const urlParams = new URLSearchParams(window.location.search);
     const mangaParam = urlParams.get('manga');
     const bulkImportParam = urlParams.get('bulkImport');
+    const bulkImportFlag = urlParams.get('bulkImportFlag');
     
-    // Handle bulk import from history
-    if (bulkImportParam) {
+    // Handle bulk import from history (via flag - for large imports)
+    if (bulkImportFlag === 'true') {
+      // Listen for the response from extension
+      const importListener = (event: MessageEvent) => {
+        // Only accept messages from extension (check origin or just trust the data structure)
+        if (event.data && event.data.type === 'BULK_IMPORT_DATA' && event.data.mangaList) {
+          console.log(`Importing ${event.data.mangaList.length} manga from extension...`);
+          handleBulkImport(event.data.mangaList);
+          window.history.replaceState({}, document.title, window.location.pathname);
+          window.removeEventListener('message', importListener);
+        }
+      };
+      window.addEventListener('message', importListener);
+      
+      // Request data from extension
+      window.postMessage({ type: 'REQUEST_BULK_IMPORT' }, '*');
+      
+      // Timeout after 10 seconds
+      setTimeout(() => {
+        window.removeEventListener('message', importListener);
+        // Try to get from localStorage as fallback
+        const stored = localStorage.getItem('pendingBulkImport');
+        if (stored) {
+          try {
+            const mangaList = JSON.parse(stored);
+            handleBulkImport(mangaList);
+            localStorage.removeItem('pendingBulkImport');
+          } catch (e) {
+            console.error('Error parsing stored import:', e instanceof Error ? e.message : String(e));
+          }
+        }
+      }, 10000);
+    }
+    // Handle bulk import from URL parameter (for smaller imports)
+    else if (bulkImportParam) {
       try {
         // Decode and parse the manga list
         let mangaList;
@@ -139,7 +187,11 @@ function App() {
           mangaList = JSON.parse(decodeURIComponent(bulkImportParam));
         } catch (parseError) {
           // Try without decoding first (in case it's already decoded)
-          mangaList = JSON.parse(bulkImportParam);
+          try {
+            mangaList = JSON.parse(bulkImportParam);
+          } catch {
+            throw parseError; // Re-throw original error if second attempt fails
+          }
         }
         
         if (Array.isArray(mangaList) && mangaList.length > 0) {
@@ -152,9 +204,10 @@ function App() {
           alert('No valid manga data found to import.');
         }
       } catch (error) {
-        console.error('Error parsing bulk import:', error);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.error('Error parsing bulk import:', errorMessage);
         console.error('Raw parameter:', bulkImportParam.substring(0, 200));
-        alert(`Error importing manga: ${error.message}. Check console for details.`);
+        alert(`Error importing manga: ${errorMessage}. Check console for details.`);
       }
     }
     // Handle single manga
@@ -165,7 +218,7 @@ function App() {
         // Clean up URL
         window.history.replaceState({}, document.title, window.location.pathname);
       } catch (error) {
-        console.error('Error parsing manga from extension:', error);
+        console.error('Error parsing manga from extension:', error instanceof Error ? error.message : String(error));
       }
     }
 
@@ -203,7 +256,7 @@ function App() {
         alert('Failed to fetch manga details. Please try again.');
       }
     } catch (error) {
-      console.error('Error selecting manga:', error);
+      console.error('Error selecting manga:', error instanceof Error ? error.message : String(error));
       alert('An error occurred while adding the manga. Please try again.');
     }
   };
