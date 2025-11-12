@@ -97,7 +97,19 @@ export default function MangaCard({ manga, onRemove, onEdit }: MangaCardProps) {
         return [];
       }));
       
-      Promise.allSettled(searchPromises).then((results) => {
+      // Add timeout to prevent infinite loading (30 seconds)
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('Search timeout')), 30000);
+      });
+
+      Promise.race([
+        Promise.allSettled(searchPromises),
+        timeoutPromise
+      ]).then((results) => {
+        if (!Array.isArray(results)) {
+          throw new Error('Search timeout');
+        }
+        
         const allResults = results
           .filter((r): r is PromiseFulfilledResult<MangaSearchResult[]> => r.status === 'fulfilled')
           .flatMap(r => r.value);
@@ -109,95 +121,95 @@ export default function MangaCard({ manga, onRemove, onEdit }: MangaCardProps) {
         
         console.log(`[${manga.id}] Found ${uniqueResults.length} unique results for "${manga.title}"`);
           
-          // Find the best match with scoring
-          const mTitle = manga.title.toLowerCase().trim();
-          const mTitleWords = mTitle.split(/\s+/).filter(w => w.length > 2); // Words longer than 2 chars
+        // Find the best match with scoring
+        const mTitle = manga.title.toLowerCase().trim();
+        const mTitleWords = mTitle.split(/\s+/).filter(w => w.length > 2); // Words longer than 2 chars
+        
+        // Score each result
+        const scoredResults = uniqueResults.map(r => {
+          let score = 0;
+          const rTitle = r.title.toLowerCase().trim();
           
-          // Score each result
-          const scoredResults = uniqueResults.map(r => {
-            let score = 0;
-            const rTitle = r.title.toLowerCase().trim();
-            
-            // Exact match = highest score
-            if (rTitle === mTitle) {
-              score += 1000;
-            }
-            
-            // Check altTitles for exact match
-            if (r.altTitles) {
-              const exactAltMatch = r.altTitles.some(alt => 
-                alt.toLowerCase().trim() === mTitle
-              );
-              if (exactAltMatch) score += 900;
-            }
-            
-            // Word-by-word matching
-            const rTitleWords = rTitle.split(/\s+/).filter(w => w.length > 2);
-            const matchingWords = mTitleWords.filter(mw => 
-              rTitleWords.some(rw => rw === mw || rw.includes(mw) || mw.includes(rw))
-            );
-            score += matchingWords.length * 10;
-            
-            // Percentage of words matched
-            if (mTitleWords.length > 0) {
-              const wordMatchRatio = matchingWords.length / mTitleWords.length;
-              score += wordMatchRatio * 100;
-            }
-            
-            // Title contains or is contained
-            if (rTitle.includes(mTitle)) score += 50;
-            if (mTitle.includes(rTitle)) score += 50;
-            
-            // Check altTitles for partial matches
-            if (r.altTitles) {
-              r.altTitles.forEach(alt => {
-                const altLower = alt.toLowerCase().trim();
-                if (altLower.includes(mTitle) || mTitle.includes(altLower)) {
-                  score += 30;
-                }
-              });
-            }
-            
-            return { result: r, score };
-          });
-          
-          // Sort by score and get the best match
-          scoredResults.sort((a, b) => b.score - a.score);
-          
-          // Only use match if score is reasonable (at least 50 points for better accuracy)
-          // Increased threshold to avoid false matches
-          const bestMatch = scoredResults[0]?.score >= 50 ? scoredResults[0].result : null;
-          
-          // Log top 3 matches for debugging
-          console.log(`[${manga.id}] Top matches for "${manga.title}":`, scoredResults.slice(0, 3).map(s => ({
-            title: s.result.title,
-            score: s.score,
-            coverImage: s.result.coverImage?.substring(0, 50) + '...',
-            id: s.result.id
-          })));
-          
-          if (bestMatch && bestMatch.coverImage) {
-            console.log(`✅ [${manga.id}] Found cover image for "${manga.title}":`, {
-              matchedTitle: bestMatch.title,
-              matchedId: bestMatch.id,
-              score: scoredResults[0].score,
-              coverImage: bestMatch.coverImage.substring(0, 80) + '...'
-            });
-            setFetchedCoverImage(bestMatch.coverImage);
-            
-            // Also update the stored manga with the cover image
-            import('../services/storage').then(({ updateTrackedManga }) => {
-              updateTrackedManga(manga.id, { coverImage: bestMatch.coverImage });
-            });
-          } else {
-            console.log(`❌ [${manga.id}] No good match found for "${manga.title}". Top result score:`, scoredResults[0]?.score, 'Title:', scoredResults[0]?.result?.title, 'ID:', scoredResults[0]?.result?.id);
+          // Exact match = highest score
+          if (rTitle === mTitle) {
+            score += 1000;
           }
-          setIsFetching(false);
-        })
-        .catch((error) => {
-          console.error(`Error searching MangaDex for "${manga.title}":`, error);
-          setIsFetching(false);
+          
+          // Check altTitles for exact match
+          if (r.altTitles) {
+            const exactAltMatch = r.altTitles.some(alt => 
+              alt.toLowerCase().trim() === mTitle
+            );
+            if (exactAltMatch) score += 900;
+          }
+          
+          // Word-by-word matching
+          const rTitleWords = rTitle.split(/\s+/).filter(w => w.length > 2);
+          const matchingWords = mTitleWords.filter(mw => 
+            rTitleWords.some(rw => rw === mw || rw.includes(mw) || mw.includes(rw))
+          );
+          score += matchingWords.length * 10;
+          
+          // Percentage of words matched
+          if (mTitleWords.length > 0) {
+            const wordMatchRatio = matchingWords.length / mTitleWords.length;
+            score += wordMatchRatio * 100;
+          }
+          
+          // Title contains or is contained
+          if (rTitle.includes(mTitle)) score += 50;
+          if (mTitle.includes(rTitle)) score += 50;
+          
+          // Check altTitles for partial matches
+          if (r.altTitles) {
+            r.altTitles.forEach(alt => {
+              const altLower = alt.toLowerCase().trim();
+              if (altLower.includes(mTitle) || mTitle.includes(altLower)) {
+                score += 30;
+              }
+            });
+          }
+          
+          return { result: r, score };
         });
+        
+        // Sort by score and get the best match
+        scoredResults.sort((a, b) => b.score - a.score);
+        
+        // Only use match if score is reasonable (at least 50 points for better accuracy)
+        // Increased threshold to avoid false matches
+        const bestMatch = scoredResults[0]?.score >= 50 ? scoredResults[0].result : null;
+        
+        // Log top 3 matches for debugging
+        console.log(`[${manga.id}] Top matches for "${manga.title}":`, scoredResults.slice(0, 3).map(s => ({
+          title: s.result.title,
+          score: s.score,
+          coverImage: s.result.coverImage?.substring(0, 50) + '...',
+          id: s.result.id
+        })));
+        
+        if (bestMatch && bestMatch.coverImage) {
+          console.log(`✅ [${manga.id}] Found cover image for "${manga.title}":`, {
+            matchedTitle: bestMatch.title,
+            matchedId: bestMatch.id,
+            score: scoredResults[0].score,
+            coverImage: bestMatch.coverImage.substring(0, 80) + '...'
+          });
+          setFetchedCoverImage(bestMatch.coverImage);
+          
+          // Also update the stored manga with the cover image
+          import('../services/storage').then(({ updateTrackedManga }) => {
+            updateTrackedManga(manga.id, { coverImage: bestMatch.coverImage });
+          });
+        } else {
+          console.log(`❌ [${manga.id}] No good match found for "${manga.title}". Top result score:`, scoredResults[0]?.score, 'Title:', scoredResults[0]?.result?.title, 'ID:', scoredResults[0]?.result?.id);
+        }
+        setIsFetching(false);
+      })
+      .catch((error) => {
+        console.error(`Error searching MangaDex for "${manga.title}":`, error);
+        setIsFetching(false);
+      });
     }
   }, [manga.coverImage, manga.id, manga.title, fetchedCoverImage, isFetching]);
 
