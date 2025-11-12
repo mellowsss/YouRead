@@ -2,16 +2,20 @@ import { useState } from 'react';
 import { Search, X } from 'lucide-react';
 import { MangaSearchResult } from '../types';
 import { searchManga } from '../services/mangaApi';
+import { searchManganato, isManganatoUrl, getManganatoDetails } from '../services/manganatoApi';
 
 interface SearchBarProps {
   onSelectManga: (manga: MangaSearchResult) => void;
 }
+
+type SearchSource = 'all' | 'mangadex' | 'manganato';
 
 export default function SearchBar({ onSelectManga }: SearchBarProps) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<MangaSearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [showResults, setShowResults] = useState(false);
+  const [source, setSource] = useState<SearchSource>('all');
 
   const handleSearch = async (searchQuery: string) => {
     if (searchQuery.trim().length < 2) {
@@ -20,11 +24,49 @@ export default function SearchBar({ onSelectManga }: SearchBarProps) {
       return;
     }
 
+    // Check if it's a MangaNato URL
+    if (isManganatoUrl(searchQuery)) {
+      setIsSearching(true);
+      try {
+        const manga = await getManganatoDetails(searchQuery);
+        if (manga) {
+          onSelectManga({
+            id: manga.id,
+            title: manga.title,
+            coverImage: manga.coverImage,
+            description: manga.description,
+          });
+          setQuery('');
+        }
+      } catch (error) {
+        console.error('Error fetching MangaNato URL:', error);
+      }
+      setIsSearching(false);
+      return;
+    }
+
     setIsSearching(true);
-    const searchResults = await searchManga(searchQuery);
-    setResults(searchResults);
-    setShowResults(true);
-    setIsSearching(false);
+    const allResults: MangaSearchResult[] = [];
+
+    try {
+      if (source === 'all' || source === 'mangadex') {
+        const mangadexResults = await searchManga(searchQuery);
+        allResults.push(...mangadexResults);
+      }
+
+      if (source === 'all' || source === 'manganato') {
+        const manganatoResults = await searchManganato(searchQuery);
+        allResults.push(...manganatoResults);
+      }
+
+      setResults(allResults);
+      setShowResults(true);
+    } catch (error) {
+      console.error('Error searching:', error);
+      setResults([]);
+    } finally {
+      setIsSearching(false);
+    }
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -48,13 +90,45 @@ export default function SearchBar({ onSelectManga }: SearchBarProps) {
 
   return (
     <div className="relative w-full max-w-2xl">
+      <div className="flex gap-2 mb-2">
+        <button
+          onClick={() => setSource('all')}
+          className={`px-3 py-1 text-xs rounded-lg transition-colors ${
+            source === 'all'
+              ? 'bg-primary-600 text-white'
+              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+          }`}
+        >
+          All
+        </button>
+        <button
+          onClick={() => setSource('mangadex')}
+          className={`px-3 py-1 text-xs rounded-lg transition-colors ${
+            source === 'mangadex'
+              ? 'bg-primary-600 text-white'
+              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+          }`}
+        >
+          MangaDex
+        </button>
+        <button
+          onClick={() => setSource('manganato')}
+          className={`px-3 py-1 text-xs rounded-lg transition-colors ${
+            source === 'manganato'
+              ? 'bg-primary-600 text-white'
+              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+          }`}
+        >
+          MangaNato
+        </button>
+      </div>
       <div className="relative">
         <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
         <input
           type="text"
           value={query}
           onChange={handleInputChange}
-          placeholder="Search for manga..."
+          placeholder="Search for manga or paste MangaNato URL..."
           className="w-full pl-12 pr-12 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
         />
         {query && (

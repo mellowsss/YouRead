@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { BookOpen, Plus } from 'lucide-react';
 import { TrackedManga, MangaSearchResult } from './types';
 import { getMangaDetails } from './services/mangaApi';
+import { getManganatoDetailsById } from './services/manganatoApi';
 import {
   getTrackedManga,
   addTrackedManga,
@@ -23,7 +24,16 @@ function App() {
   }, []);
 
   const handleSelectManga = async (mangaResult: MangaSearchResult) => {
-    const details = await getMangaDetails(mangaResult.id);
+    let details = null;
+    
+    // Check if it's a MangaNato manga
+    if (mangaResult.id.startsWith('manganato_')) {
+      details = await getManganatoDetailsById(mangaResult.id);
+    } else {
+      // MangaDex manga
+      details = await getMangaDetails(mangaResult.id);
+    }
+    
     if (details) {
       const newManga: TrackedManga = {
         ...details,

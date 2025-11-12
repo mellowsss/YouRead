@@ -1,4 +1,4 @@
-import { BookOpen, Calendar, Trash2, Edit3 } from 'lucide-react';
+import { BookOpen, Calendar, Trash2, Edit3, ExternalLink } from 'lucide-react';
 import { TrackedManga } from '../types';
 
 interface MangaCardProps {
@@ -93,11 +93,23 @@ export default function MangaCard({ manga, onRemove, onEdit }: MangaCardProps) {
             </div>
           )}
 
-          <div className="flex items-center gap-4 text-xs text-gray-500">
+          <div className="flex items-center justify-between text-xs text-gray-500">
             <div className="flex items-center gap-1">
               <Calendar className="w-3 h-3" />
               <span>Added {new Date(manga.dateAdded).toLocaleDateString()}</span>
             </div>
+            {manga.manganatoUrl && (
+              <a
+                href={manga.manganatoUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 text-primary-600 hover:text-primary-700 transition-colors"
+                title="Open on MangaNato"
+              >
+                <ExternalLink className="w-3 h-3" />
+                <span>MangaNato</span>
+              </a>
+            )}
           </div>
         </div>
       </div>
