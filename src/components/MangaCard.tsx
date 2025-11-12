@@ -152,16 +152,23 @@ export default function MangaCard({ manga, onRemove, onEdit }: MangaCardProps) {
           
           // Sort by score and get the best match
           scoredResults.sort((a, b) => b.score - a.score);
-          const bestMatch = scoredResults[0]?.score > 0 ? scoredResults[0].result : null;
           
-          console.log(`Best match for "${manga.title}":`, {
-            title: bestMatch?.title,
-            score: scoredResults[0]?.score,
-            coverImage: bestMatch?.coverImage
-          });
+          // Only use match if score is reasonable (at least 20 points)
+          const bestMatch = scoredResults[0]?.score >= 20 ? scoredResults[0].result : null;
+          
+          // Log top 3 matches for debugging
+          console.log(`Top matches for "${manga.title}":`, scoredResults.slice(0, 3).map(s => ({
+            title: s.result.title,
+            score: s.score,
+            coverImage: s.result.coverImage?.substring(0, 50) + '...'
+          })));
           
           if (bestMatch && bestMatch.coverImage) {
-            console.log(`✅ Found cover image for "${manga.title}" from MangaDex:`, bestMatch.coverImage);
+            console.log(`✅ Found cover image for "${manga.title}":`, {
+              matchedTitle: bestMatch.title,
+              score: scoredResults[0].score,
+              coverImage: bestMatch.coverImage
+            });
             setFetchedCoverImage(bestMatch.coverImage);
             
             // Also update the stored manga with the cover image
@@ -169,7 +176,7 @@ export default function MangaCard({ manga, onRemove, onEdit }: MangaCardProps) {
               updateTrackedManga(manga.id, { coverImage: bestMatch.coverImage });
             });
           } else {
-            console.log(`❌ No good match found for "${manga.title}" in MangaDex. Top result:`, scoredResults[0]?.result?.title);
+            console.log(`❌ No good match found for "${manga.title}". Top result score:`, scoredResults[0]?.score, 'Title:', scoredResults[0]?.result?.title);
           }
           setIsFetching(false);
         })

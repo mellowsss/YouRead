@@ -96,29 +96,12 @@ function App() {
         const existing = currentManga.find(m => m.id === manga.id);
         
         if (!existing) {
-          // Clean and validate cover image - preserve it if it exists
-          let coverImage = manga.coverImage;
-          console.log(`Processing manga "${manga.title}":`, {
-            originalCoverImage: manga.coverImage,
-            coverImageType: typeof manga.coverImage,
-            coverImageValue: manga.coverImage
-          });
-          
-          if (coverImage && typeof coverImage === 'string') {
-            coverImage = coverImage.trim();
-            if (coverImage === '') {
-              coverImage = undefined;
-            }
-          } else if (coverImage === null || coverImage === undefined) {
-            coverImage = undefined;
-          }
-          
-          console.log(`Final coverImage for "${manga.title}":`, coverImage);
-          
+          // Don't save cover images from extension - let MangaCard fetch them from MangaDex
+          // This ensures we get the correct image for each manga
           const newManga: TrackedManga = {
             id: manga.id,
             title: manga.title,
-            coverImage: coverImage, // Keep original URL - proxy will be applied in component
+            coverImage: undefined, // Let MangaCard fetch from MangaDex for better matching
             manganatoUrl: manga.manganatoUrl,
             lastReadChapter: manga.lastReadChapter,
             totalChapters: manga.totalChapters || manga.chapters,
@@ -127,7 +110,6 @@ function App() {
             lastUpdated: new Date().toISOString(),
           };
           
-          console.log(`Saving manga "${manga.title}" with coverImage:`, newManga.coverImage);
           addTrackedManga(newManga);
           added++;
         } else {
