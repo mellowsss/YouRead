@@ -3,12 +3,11 @@ import { TrackedManga } from '../types';
 
 interface MangaCardProps {
   manga: TrackedManga;
-  onUpdate: (id: string, updates: Partial<TrackedManga>) => void;
   onRemove: (id: string) => void;
   onEdit: (manga: TrackedManga) => void;
 }
 
-export default function MangaCard({ manga, onUpdate, onRemove, onEdit }: MangaCardProps) {
+export default function MangaCard({ manga, onRemove, onEdit }: MangaCardProps) {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'reading':

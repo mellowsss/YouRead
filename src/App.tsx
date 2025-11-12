@@ -151,7 +151,6 @@ function App() {
               <MangaCard
                 key={manga.id}
                 manga={manga}
-                onUpdate={handleUpdateManga}
                 onRemove={handleRemoveManga}
                 onEdit={handleEditManga}
               />
